@@ -1,0 +1,16 @@
+{
+  "name": "aws-cloudfront-yaml-parser",
+  "version": "1.0.0",
+  "description": "A simple AWS Cloudfront YAML parser",
+  "main": "index.ts",
+  "scripts": {
+    "start": "ts-node index.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Abinand P",
+  "license": "ISC",
+  "dependencies": {
+    "ts-node": "^10.9.2"
+  }
+}
