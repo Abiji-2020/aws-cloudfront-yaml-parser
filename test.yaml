@@ -132,7 +132,7 @@ Resources:
                   - ec2:DescribeVpcEndpointServiceConfigurations
                   - ec2:ModifyVpcEndpointServiceConfiguration
                   - route53:ChangeResourceRecordSets
-                Resource: '*'
+                Resource: "*"
 
   ASCPrivateLinkLambdaFunction:
     Type: AWS::Lambda::Function

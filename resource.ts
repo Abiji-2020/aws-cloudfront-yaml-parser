@@ -1,5 +1,4 @@
 interface CloudFormationResource {
-    Type: string;
-    Properties: Record<string, any>;
-    
+  Type: string;
+  Properties: Record<string, any>;
 }
