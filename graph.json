@@ -1,0 +1,369 @@
+{
+  "nodes": [
+    {
+      "id": "MyVPC",
+      "type": "AWS::EC2::VPC",
+      "service": "EC2",
+      "properties": {
+        "CidrBlock": {
+          "Ref": "VpcCIDR"
+        },
+        "EnableDnsSupport": true,
+        "EnableDnsHostnames": true,
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "MyVPC"
+          }
+        ]
+      }
+    },
+    {
+      "id": "MyInternetGateway",
+      "type": "AWS::EC2::InternetGateway",
+      "service": "EC2",
+      "properties": {}
+    },
+    {
+      "id": "AttachGateway",
+      "type": "AWS::EC2::VPCGatewayAttachment",
+      "service": "EC2",
+      "properties": {
+        "VpcId": {
+          "Ref": "MyVPC"
+        },
+        "InternetGatewayId": {
+          "Ref": "MyInternetGateway"
+        }
+      }
+    },
+    {
+      "id": "PublicSubnet",
+      "type": "AWS::EC2::Subnet",
+      "service": "EC2",
+      "properties": {
+        "VpcId": {
+          "Ref": "MyVPC"
+        },
+        "CidrBlock": {
+          "Ref": "PublicSubnetCIDR"
+        },
+        "MapPublicIpOnLaunch": true,
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "PublicSubnet"
+          }
+        ]
+      }
+    },
+    {
+      "id": "PrivateSubnet",
+      "type": "AWS::EC2::Subnet",
+      "service": "EC2",
+      "properties": {
+        "VpcId": {
+          "Ref": "MyVPC"
+        },
+        "CidrBlock": {
+          "Ref": "PrivateSubnetCIDR"
+        },
+        "MapPublicIpOnLaunch": false,
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "PrivateSubnet"
+          }
+        ]
+      }
+    },
+    {
+      "id": "PublicRouteTable",
+      "type": "AWS::EC2::RouteTable",
+      "service": "EC2",
+      "properties": {
+        "VpcId": {
+          "Ref": "MyVPC"
+        }
+      }
+    },
+    {
+      "id": "PrivateRouteTable",
+      "type": "AWS::EC2::RouteTable",
+      "service": "EC2",
+      "properties": {
+        "VpcId": {
+          "Ref": "MyVPC"
+        }
+      }
+    },
+    {
+      "id": "PublicRoute",
+      "type": "AWS::EC2::Route",
+      "service": "EC2",
+      "properties": {
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Ref": "MyInternetGateway"
+        }
+      }
+    },
+    {
+      "id": "PublicSubnetRouteTableAssociation",
+      "type": "AWS::EC2::SubnetRouteTableAssociation",
+      "service": "EC2",
+      "properties": {
+        "SubnetId": {
+          "Ref": "PublicSubnet"
+        },
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        }
+      }
+    },
+    {
+      "id": "PrivateSubnetRouteTableAssociation",
+      "type": "AWS::EC2::SubnetRouteTableAssociation",
+      "service": "EC2",
+      "properties": {
+        "SubnetId": {
+          "Ref": "PrivateSubnet"
+        },
+        "RouteTableId": {
+          "Ref": "PrivateRouteTable"
+        }
+      }
+    },
+    {
+      "id": "MySecurityGroup",
+      "type": "AWS::EC2::SecurityGroup",
+      "service": "EC2",
+      "properties": {
+        "GroupDescription": "Allow SSH and HTTP access",
+        "VpcId": {
+          "Ref": "MyVPC"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 80,
+            "ToPort": 80,
+            "CidrIp": "0.0.0.0/0"
+          }
+        ]
+      }
+    },
+    {
+      "id": "MyPublicEC2Instance",
+      "type": "AWS::EC2::Instance",
+      "service": "EC2",
+      "properties": {
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "ImageId": {
+          "Fn::FindInMap": [
+            "RegionMap",
+            {
+              "Ref": "AWS::Region"
+            },
+            "AMI"
+          ]
+        },
+        "SubnetId": {
+          "Ref": "PublicSubnet"
+        },
+        "SecurityGroupIds": [
+          {
+            "Ref": "MySecurityGroup"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "PublicInstance"
+          }
+        ]
+      }
+    },
+    {
+      "id": "MyPrivateEC2Instance",
+      "type": "AWS::EC2::Instance",
+      "service": "EC2",
+      "properties": {
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "ImageId": {
+          "Fn::FindInMap": [
+            "RegionMap",
+            {
+              "Ref": "AWS::Region"
+            },
+            "AMI"
+          ]
+        },
+        "SubnetId": {
+          "Ref": "PrivateSubnet"
+        },
+        "SecurityGroupIds": [
+          {
+            "Ref": "MySecurityGroup"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "PrivateInstance"
+          }
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "MyVPC",
+      "target": "VpcCIDR",
+      "relationship": "references"
+    },
+    {
+      "source": "AttachGateway",
+      "target": "MyVPC",
+      "relationship": "references"
+    },
+    {
+      "source": "AttachGateway",
+      "target": "MyInternetGateway",
+      "relationship": "references"
+    },
+    {
+      "source": "PublicSubnet",
+      "target": "MyVPC",
+      "relationship": "references"
+    },
+    {
+      "source": "PublicSubnet",
+      "target": "PublicSubnetCIDR",
+      "relationship": "references"
+    },
+    {
+      "source": "PrivateSubnet",
+      "target": "MyVPC",
+      "relationship": "references"
+    },
+    {
+      "source": "PrivateSubnet",
+      "target": "PrivateSubnetCIDR",
+      "relationship": "references"
+    },
+    {
+      "source": "PublicRouteTable",
+      "target": "MyVPC",
+      "relationship": "references"
+    },
+    {
+      "source": "PrivateRouteTable",
+      "target": "MyVPC",
+      "relationship": "references"
+    },
+    {
+      "source": "PublicRoute",
+      "target": "AttachGateway",
+      "relationship": "depends_on"
+    },
+    {
+      "source": "PublicRoute",
+      "target": "PublicRouteTable",
+      "relationship": "references"
+    },
+    {
+      "source": "PublicRoute",
+      "target": "MyInternetGateway",
+      "relationship": "references"
+    },
+    {
+      "source": "PublicSubnetRouteTableAssociation",
+      "target": "PublicSubnet",
+      "relationship": "references"
+    },
+    {
+      "source": "PublicSubnetRouteTableAssociation",
+      "target": "PublicRouteTable",
+      "relationship": "references"
+    },
+    {
+      "source": "PrivateSubnetRouteTableAssociation",
+      "target": "PrivateSubnet",
+      "relationship": "references"
+    },
+    {
+      "source": "PrivateSubnetRouteTableAssociation",
+      "target": "PrivateRouteTable",
+      "relationship": "references"
+    },
+    {
+      "source": "MySecurityGroup",
+      "target": "MyVPC",
+      "relationship": "references"
+    },
+    {
+      "source": "MyPublicEC2Instance",
+      "target": "PublicRoute",
+      "relationship": "depends_on"
+    },
+    {
+      "source": "MyPublicEC2Instance",
+      "target": "InstanceType",
+      "relationship": "references"
+    },
+    {
+      "source": "MyPublicEC2Instance",
+      "target": "AWS::Region",
+      "relationship": "references"
+    },
+    {
+      "source": "MyPublicEC2Instance",
+      "target": "PublicSubnet",
+      "relationship": "references"
+    },
+    {
+      "source": "MyPublicEC2Instance",
+      "target": "MySecurityGroup",
+      "relationship": "references"
+    },
+    {
+      "source": "MyPrivateEC2Instance",
+      "target": "PrivateSubnetRouteTableAssociation",
+      "relationship": "depends_on"
+    },
+    {
+      "source": "MyPrivateEC2Instance",
+      "target": "InstanceType",
+      "relationship": "references"
+    },
+    {
+      "source": "MyPrivateEC2Instance",
+      "target": "AWS::Region",
+      "relationship": "references"
+    },
+    {
+      "source": "MyPrivateEC2Instance",
+      "target": "PrivateSubnet",
+      "relationship": "references"
+    },
+    {
+      "source": "MyPrivateEC2Instance",
+      "target": "MySecurityGroup",
+      "relationship": "references"
+    }
+  ]
+}

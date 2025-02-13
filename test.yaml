@@ -1,280 +1,157 @@
 AWSTemplateFormatVersion: "2010-09-09"
 
-Description: CloudFormation template to create PrivateLink infrastructure
-
-Metadata:
-  AWS::CloudFormation::Interface:
-    ParameterGroups:
-      - Label:
-          default: Domain Configuration
-        Parameters:
-          - DomainName
-          - HostedZone
-      - Label:
-          default: Network Configuration
-        Parameters:
-          - VpcId
-          - Subnets
-      - Label:
-          default: SAP Configuration
-        Parameters:
-          - IP
-          - Protocol
-          - Port
-          - HealthCheckPath
-          - InVpc
-
 Parameters:
-  DomainName:
-    Description: The fully qualified or wildcard domain name of DNS
+  InstanceType:
     Type: String
-
-  HostedZone:
-    Description: The public hostedZone of above domain name
-    Type: AWS::Route53::HostedZone::Id
-
-  VpcId:
-    Description: VpcId of your existing Virtual Private Cloud (VPC) where SAP resides
-    Type: AWS::EC2::VPC::Id
-
-  Subnets:
-    Description: The private subnets (must include one where SAP resides) of above VPC, recommend choose multiple covering different AZs
-    Type: List<AWS::EC2::Subnet::Id>
-
-  SecurityGroups:
-    Type: List<AWS::EC2::SecurityGroup::Id>
-
-  IP:
-    Description: SAP Gateway's private IP address within VPC
-    Type: String
-
-  Protocol:
-    Description: SAP Gateway's connect protocol
-    Type: String
+    Default: t2.micro
     AllowedValues:
-      - HTTP
-      - HTTPS
-    Default: HTTP
+      - t2.micro
+      - t2.small
+      - t2.medium
 
-  Port:
-    Description: SAP Gateway's HTTP or HTTPS (match with protocol you choose above) port number
-    Type: Number
-    Default: 50000
-
-  HealthCheckPath:
-    Description: SAP Gateway's ping path to do health check
+  VpcCIDR:
     Type: String
-    Default: /sap/public/ping
+    Default: 10.0.0.0/16
 
-  InVpc:
-    Description: Choose Yes if SAP resides in above VPC; choose No otherwise (in cases of above VPC just peers with another SAP residing VPC)
+  PublicSubnetCIDR:
     Type: String
-    AllowedValues:
-      - Yes
-      - No
-    Default: Yes
+    Default: 10.0.1.0/24
 
-Rules:
-  SubnetsInVPC:
-    Assertions:
-      - Assert:
-          Fn::EachMemberEquals:
-            - !ValueOf
-              - Subnets
-              - VpcId
-            - !Ref VpcId
-        AssertDescription: All subnets must in the VPC
+  PrivateSubnetCIDR:
+    Type: String
+    Default: 10.0.2.0/24
 
-Conditions:
-  IpInVpc: !Equals
-    - !Ref InVpc
-    - Yes
-
-  SapUseHttps: !Equals
-    - !Ref Protocol
-    - HTTPS
-
-Transform: AWS::LanguageExtensions
+Mappings:
+  RegionMap:
+    us-east-1:
+      AMI: ami-0abcdef1234567890
+    us-west-1:
+      AMI: ami-0abcdef0987654321
 
 Resources:
-  ASCPrivateLinkCertificate:
-    Type: AWS::CertificateManager::Certificate
+  MyVPC:
+    Type: AWS::EC2::VPC
     Properties:
-      DomainName: !Ref DomainName
-      ValidationMethod: DNS
-      DomainValidationOptions:
-        - DomainName: !Ref DomainName
-          HostedZoneId: !Ref HostedZone
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: MyVPC
 
-  ASCPrivateLinkLambdaRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Action:
-              - sts:AssumeRole
-            Principal:
-              Service:
-                - lambda.amazonaws.com
-      Path: /
-      Policies:
-        - PolicyName: ASCPrivateLinkLambdaPolicy
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                  - ec2:DescribeVpcEndpointServiceConfigurations
-                  - ec2:ModifyVpcEndpointServiceConfiguration
-                  - route53:ChangeResourceRecordSets
-                Resource: "*"
+  MyInternetGateway:
+    Type: AWS::EC2::InternetGateway
 
-  ASCPrivateLinkLambdaFunction:
-    Type: AWS::Lambda::Function
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
     Properties:
-      Description: Lambda function to help with private link infrastructure setup
-      Handler: index.handler
-      Role: !GetAtt ASCPrivateLinkLambdaRole.Arn
-      Timeout: 900
-      Runtime: python3.12
-      VpcConfig:
-        SubnetIds: !Ref Subnets
-        SecurityGroupIds: !Ref SecurityGroups
-      Code:
-        ZipFile: !Sub
-          - |
-            import boto3
-            import cfnresponse
-            import logging
-            def handler(event, context):
-              print('Receive event: {} and context: {}'.format(str(event), str(context)))
-              responseData = {}
-              eventType = event['RequestType'].strip()
-              props = event['ResourceProperties']
-              try:
-                if eventType in ('Create'):
-                  match props['Action']:
-                    case 'EnablePrivateDNS':
-                      dnsClient = boto3.client('route53')
-                      ec2Client = boto3.client('ec2')
-                      serviceId = props['ServiceId']
-                      domainName = props['DomainName']
-                      hostedZoneId = props['HostedZoneId']
-                      ec2Client.modify_vpc_endpoint_service_configuration(ServiceId=serviceId, PrivateDnsName=domainName)
-                      validationRecord = ec2Client.describe_vpc_endpoint_service_configurations(ServiceIds=[serviceId])['ServiceConfigurations'][0]['PrivateDnsNameConfiguration']
-                      dnsClient.change_resource_record_sets(
-                        HostedZoneId=hostedZoneId,
-                        ChangeBatch={
-                          'Changes': [
-                            {
-                              'Action': 'UPSERT',
-                              'ResourceRecordSet': {
-                                'Type': validationRecord['Type'],
-                                'Name': '{}.{}'.format(validationRecord['Name'], domainName[2:] if domainName.startswith('*') else domainName),
-                                'ResourceRecords': [{'Value': '"{}"'.format(validationRecord['Value'])}],
-                                'TTL': 300
-                              }
-                            }
-                          ]
-                        }
-                      )
-                    case _:
-                      raise Exception('Unsupported action')
-                else:
-                  print('Skip on resource UPDATE and DELETE')
-                cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
-              except Exception as e:
-                logging.exception(e)
-                cfnresponse.send(event, context, cfnresponse.FAILED, responseData)
-          - Region: !Ref AWS::Region
+      VpcId: !Ref MyVPC
+      InternetGatewayId: !Ref MyInternetGateway
 
-  ASCPrivateLinkEnablePrivateDNS:
-    Type: Custom::CustomResource
-    DependsOn: ASCPrivateLinkVPCES
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
     Properties:
-      ServiceToken: !GetAtt ASCPrivateLinkLambdaFunction.Arn
-      Action: EnablePrivateDNS
-      ServiceId: !Ref ASCPrivateLinkVPCES
-      DomainName: !Ref DomainName
-      HostedZoneId: !Ref HostedZone
+      VpcId: !Ref MyVPC
+      CidrBlock: !Ref PublicSubnetCIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: PublicSubnet
 
-  ASCPrivateLinkNLB:
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
     Properties:
-      Type: network
-      Scheme: internal
-      Subnets: !Ref Subnets
-      LoadBalancerAttributes:
-        - Key: load_balancing.cross_zone.enabled # SAP may only live in one AZ, need route to it if traffic from different AZ
-          Value: true
+      VpcId: !Ref MyVPC
+      CidrBlock: !Ref PrivateSubnetCIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet
 
-  ASCPrivateLinkTargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
     Properties:
-      VpcId: !Ref VpcId
-      Protocol: !If
-        - SapUseHttps
-        - TLS
-        - TCP
-      Port: 443
-      TargetType: ip
-      Targets:
-        - AvailabilityZone: !If
-            - IpInVpc
-            - !Ref AWS::NoValue
-            - all
-          Id: !Ref IP
-          Port: !Ref Port
-      HealthCheckPath: !Ref HealthCheckPath
-      HealthCheckProtocol: !Ref Protocol
+      VpcId: !Ref MyVPC
 
-  ASCPrivateLinkListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
     Properties:
-      LoadBalancerArn: !Ref ASCPrivateLinkNLB
-      Protocol: TLS
-      Port: 443
-      SslPolicy: ELBSecurityPolicy-TLS13-1-0-2021-06
-      Certificates:
-        - CertificateArn: !Ref ASCPrivateLinkCertificate
-      DefaultActions:
-        - Type: forward
-          TargetGroupArn: !Ref ASCPrivateLinkTargetGroup
+      VpcId: !Ref MyVPC
 
-  ASCPrivateLinkVPCES:
-    Type: AWS::EC2::VPCEndpointService
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
     Properties:
-      AcceptanceRequired: false
-      NetworkLoadBalancerArns:
-        - !Ref ASCPrivateLinkNLB
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref MyInternetGateway
 
-  ASCPrivateLinkVPCESPermission:
-    Type: AWS::EC2::VPCEndpointServicePermissions
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      AllowedPrincipals:
-        - appflow.amazonaws.com
-      ServiceId: !Ref ASCPrivateLinkVPCES
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet
+      RouteTableId: !Ref PrivateRouteTable
+
+  MySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH and HTTP access
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  MyPublicEC2Instance:
+    Type: AWS::EC2::Instance
+    DependsOn: PublicRoute
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AMI]
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref MySecurityGroup
+      Tags:
+        - Key: Name
+          Value: PublicInstance
+
+  MyPrivateEC2Instance:
+    Type: AWS::EC2::Instance
+    DependsOn: PrivateSubnetRouteTableAssociation
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AMI]
+      SubnetId: !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref MySecurityGroup
+      Tags:
+        - Key: Name
+          Value: PrivateInstance
 
 Outputs:
-  CertificateURL:
-    Description: Go to this URL to check certificate issued or not (also find domain verification details)
-    Value: !Sub
-      - https://${AWS::Region}.console.aws.amazon.com/acm/home?region=${AWS::Region}#/certificates/${CertificateId}
-      - CertificateId: !Select
-          - 1
-          - !Split
-            - /
-            - !Ref ASCPrivateLinkCertificate
-
-  VPCEndpointServiceURL:
-    Description: Go to this URL to check VPC Endpoint Service attributes (also find privateDNS domain verification details)
-    Value: !Sub https://${AWS::Region}.console.aws.amazon.com/vpc/home?region=${AWS::Region}#VpcEndpointServiceDetails:EndpointServiceId=${ASCPrivateLinkVPCES}
-
-  TargetGroupURL:
-    Description: Go to this URL to check target group health check status (to see if got connectivity to SAP)
-    Value: !Sub https://${AWS::Region}.console.aws.amazon.com/ec2/home?region=${AWS::Region}#TargetGroup:targetGroupArn=${ASCPrivateLinkTargetGroup}
+  PublicInstanceID:
+    Description: Public EC2 Instance ID
+    Value: !Ref MyPublicEC2Instance
+  PrivateInstanceID:
+    Description: Private EC2 Instance ID
+    Value: !Ref MyPrivateEC2Instance
+  VpcID:
+    Description: VPC ID
+    Value: !Ref MyVPC
+  PublicSubnetID:
+    Description: Public Subnet ID
+    Value: !Ref PublicSubnet
+  PrivateSubnetID:
+    Description: Private Subnet ID
+    Value: !Ref PrivateSubnet
