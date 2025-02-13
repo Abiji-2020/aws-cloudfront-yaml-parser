@@ -1,0 +1,164 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Complex AWS Infrastructure with VPC, EC2, RDS, S3, and ALB",
+    
+    "Parameters": {
+      "Environment": {
+        "Type": "String",
+        "AllowedValues": ["dev", "prod"],
+        "Description": "Deployment environment"
+      },
+      "InstanceType": {
+        "Type": "String",
+        "Default": "t3.micro",
+        "Description": "EC2 instance type"
+      }
+    },
+  
+    "Conditions": {
+      "IsProd": { "Fn::Equals": [{ "Ref": "Environment" }, "prod"] }
+    },
+  
+    "Resources": {
+      "MyVPC": {
+        "Type": "AWS::EC2::VPC",
+        "Properties": {
+          "CidrBlock": "10.0.0.0/16",
+          "EnableDnsSupport": true,
+          "EnableDnsHostnames": true,
+          "Tags": [{ "Key": "Name", "Value": "MyVPC" }]
+        }
+      },
+  
+      "PublicSubnet": {
+        "Type": "AWS::EC2::Subnet",
+        "Properties": {
+          "VpcId": { "Ref": "MyVPC" },
+          "CidrBlock": "10.0.1.0/24",
+          "MapPublicIpOnLaunch": true,
+          "Tags": [{ "Key": "Name", "Value": "PublicSubnet" }]
+        }
+      },
+  
+      "PrivateSubnet": {
+        "Type": "AWS::EC2::Subnet",
+        "Properties": {
+          "VpcId": { "Ref": "MyVPC" },
+          "CidrBlock": "10.0.2.0/24",
+          "Tags": [{ "Key": "Name", "Value": "PrivateSubnet" }]
+        }
+      },
+  
+      "InstanceSecurityGroup": {
+        "Type": "AWS::EC2::SecurityGroup",
+        "Properties": {
+          "GroupDescription": "Allow SSH and HTTP",
+          "VpcId": { "Ref": "MyVPC" },
+          "SecurityGroupIngress": [
+            { "IpProtocol": "tcp", "FromPort": 22, "ToPort": 22, "CidrIp": "0.0.0.0/0" },
+            { "IpProtocol": "tcp", "FromPort": 80, "ToPort": 80, "CidrIp": "0.0.0.0/0" }
+          ]
+        }
+      },
+  
+      "MyEC2Instance": {
+        "Type": "AWS::EC2::Instance",
+        "Properties": {
+          "InstanceType": { "Ref": "InstanceType" },
+          "ImageId": { "Fn::FindInMap": ["RegionMap", { "Ref": "AWS::Region" }, "AMI"] },
+          "SubnetId": { "Ref": "PublicSubnet" },
+          "SecurityGroupIds": [{ "Ref": "InstanceSecurityGroup" }],
+          "Tags": [{ "Key": "Name", "Value": "WebServer" }]
+        }
+      },
+  
+      "MyS3Bucket": {
+        "Type": "AWS::S3::Bucket",
+        "Properties": {
+          "BucketName": { "Fn::Sub": "my-app-bucket-${AWS::Region}-${AWS::AccountId}" },
+          "VersioningConfiguration": {
+            "Status": "Enabled"
+          },
+          "LifecycleConfiguration": {
+            "Rules": [
+              {
+                "Id": "MoveToIA",
+                "Status": "Enabled",
+                "Prefix": "",
+                "Transitions": [{ "StorageClass": "STANDARD_IA", "TransitionInDays": 30 }]
+              }
+            ]
+          }
+        }
+      },
+  
+      "MyRDSInstance": {
+        "Type": "AWS::RDS::DBInstance",
+        "Properties": {
+          "DBInstanceClass": "db.t3.micro",
+          "Engine": "mysql",
+          "AllocatedStorage": "20",
+          "DBName": "mydatabase",
+          "MasterUsername": "admin",
+          "MasterUserPassword": "SecurePassword123!",
+          "VPCSecurityGroups": [{ "Ref": "InstanceSecurityGroup" }],
+          "DBSubnetGroupName": { "Ref": "PrivateSubnet" }
+        },
+        "DependsOn": ["MyVPC"]
+      },
+  
+      "ApplicationLoadBalancer": {
+        "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+        "Properties": {
+          "Name": "MyALB",
+          "Subnets": [{ "Ref": "PublicSubnet" }],
+          "SecurityGroups": [{ "Ref": "InstanceSecurityGroup" }],
+          "Scheme": "internet-facing",
+          "LoadBalancerAttributes": [{ "Key": "deletion_protection.enabled", "Value": { "Fn::If": ["IsProd", "true", "false"] } }]
+        }
+      },
+  
+      "AutoScalingGroup": {
+        "Type": "AWS::AutoScaling::AutoScalingGroup",
+        "Properties": {
+          "VPCZoneIdentifier": [{ "Ref": "PublicSubnet" }],
+          "LaunchConfigurationName": { "Ref": "LaunchConfig" },
+          "MinSize": "1",
+          "MaxSize": "3",
+          "DesiredCapacity": "2"
+        }
+      },
+  
+      "LaunchConfig": {
+        "Type": "AWS::AutoScaling::LaunchConfiguration",
+        "Properties": {
+          "ImageId": { "Fn::FindInMap": ["RegionMap", { "Ref": "AWS::Region" }, "AMI"] },
+          "InstanceType": { "Ref": "InstanceType" },
+          "SecurityGroups": [{ "Ref": "InstanceSecurityGroup" }]
+        }
+      }
+    },
+  
+    "Mappings": {
+      "RegionMap": {
+        "us-east-1": { "AMI": "ami-0abcdef1234567890" },
+        "us-west-1": { "AMI": "ami-0abcdef1234567891" }
+      }
+    },
+  
+    "Outputs": {
+      "EC2Instance": {
+        "Description": "EC2 Instance Public DNS",
+        "Value": { "Fn::GetAtt": ["MyEC2Instance", "PublicDnsName"] }
+      },
+      "S3BucketName": {
+        "Description": "S3 Bucket Name",
+        "Value": { "Ref": "MyS3Bucket" }
+      },
+      "RDSInstanceEndpoint": {
+        "Description": "RDS Instance Endpoint",
+        "Value": { "Fn::GetAtt": ["MyRDSInstance", "Endpoint.Address"] }
+      }
+    }
+  }
+  
