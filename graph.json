@@ -3,6 +3,8 @@
     {
       "id": "MyVPC",
       "type": "AWS::EC2::VPC",
+      "rType": "Compute",
+      "nodeGroup": "standalone",
       "service": "EC2",
       "properties": {
         "CidrBlock": {
@@ -21,12 +23,16 @@
     {
       "id": "MyInternetGateway",
       "type": "AWS::EC2::InternetGateway",
+      "rType": "Compute",
+      "nodeGroup": "standalone",
       "service": "EC2",
       "properties": {}
     },
     {
       "id": "AttachGateway",
       "type": "AWS::EC2::VPCGatewayAttachment",
+      "rType": "Compute",
+      "nodeGroup": "standalone",
       "service": "EC2",
       "properties": {
         "VpcId": {
@@ -40,6 +46,8 @@
     {
       "id": "PublicSubnet",
       "type": "AWS::EC2::Subnet",
+      "rType": "Compute",
+      "nodeGroup": "grouped",
       "service": "EC2",
       "properties": {
         "VpcId": {
@@ -60,6 +68,8 @@
     {
       "id": "PrivateSubnet",
       "type": "AWS::EC2::Subnet",
+      "rType": "Compute",
+      "nodeGroup": "grouped",
       "service": "EC2",
       "properties": {
         "VpcId": {
@@ -80,6 +90,8 @@
     {
       "id": "PublicRouteTable",
       "type": "AWS::EC2::RouteTable",
+      "rType": "Compute",
+      "nodeGroup": "standalone",
       "service": "EC2",
       "properties": {
         "VpcId": {
@@ -90,6 +102,8 @@
     {
       "id": "PrivateRouteTable",
       "type": "AWS::EC2::RouteTable",
+      "rType": "Compute",
+      "nodeGroup": "standalone",
       "service": "EC2",
       "properties": {
         "VpcId": {
@@ -100,6 +114,8 @@
     {
       "id": "PublicRoute",
       "type": "AWS::EC2::Route",
+      "rType": "Compute",
+      "nodeGroup": "standalone",
       "service": "EC2",
       "properties": {
         "RouteTableId": {
@@ -114,6 +130,8 @@
     {
       "id": "PublicSubnetRouteTableAssociation",
       "type": "AWS::EC2::SubnetRouteTableAssociation",
+      "rType": "Compute",
+      "nodeGroup": "standalone",
       "service": "EC2",
       "properties": {
         "SubnetId": {
@@ -127,6 +145,8 @@
     {
       "id": "PrivateSubnetRouteTableAssociation",
       "type": "AWS::EC2::SubnetRouteTableAssociation",
+      "rType": "Compute",
+      "nodeGroup": "standalone",
       "service": "EC2",
       "properties": {
         "SubnetId": {
@@ -140,6 +160,8 @@
     {
       "id": "MySecurityGroup",
       "type": "AWS::EC2::SecurityGroup",
+      "rType": "Compute",
+      "nodeGroup": "grouped",
       "service": "EC2",
       "properties": {
         "GroupDescription": "Allow SSH and HTTP access",
@@ -165,6 +187,8 @@
     {
       "id": "MyPublicEC2Instance",
       "type": "AWS::EC2::Instance",
+      "rType": "Compute",
+      "nodeGroup": "standalone",
       "service": "EC2",
       "properties": {
         "InstanceType": {
@@ -198,6 +222,8 @@
     {
       "id": "MyPrivateEC2Instance",
       "type": "AWS::EC2::Instance",
+      "rType": "Compute",
+      "nodeGroup": "standalone",
       "service": "EC2",
       "properties": {
         "InstanceType": {
