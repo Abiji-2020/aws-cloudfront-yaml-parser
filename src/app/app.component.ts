@@ -1,12 +1,15 @@
 import { Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
+import { CytoscapeCanvaComponent } from './cytoscape-canva/cytoscape-canva.component';
+import { EditorComponent } from './editor/editor.component';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet],
+  standalone: true,
+  imports: [RouterOutlet, CytoscapeCanvaComponent, EditorComponent],
   templateUrl: './app.component.html',
-  styleUrl: './app.component.css'
+  styleUrls: ['./app.component.css']
 })
 export class AppComponent {
-  title = 'yaml-parser';
+  title = 'aws architecture diagram composer';
 }

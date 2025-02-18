@@ -1,0 +1,4 @@
+<div>
+    <button (click)="toggleLanguage()">Toggle to {{ currentLanguage === 'json' ? 'YAML' : 'JSON' }}</button>
+  </div>
+  <ngx-monaco-editor [options]="editorOptions" [formControl]="code"></ngx-monaco-editor>
