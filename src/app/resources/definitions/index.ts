@@ -13,9 +13,28 @@ import graphql from './graphql';
 import httpApi from './httpApi';
 import httpProxy from './httpProxy';
 import implicitApi from './implicitApi';
+import lambda from './lambda';
+import layer from './layer';
+import objectStore from './objectStore';
+import queue from './queue';
+import secrets from './secrets';
+import stream from './stream';
+import simpleTable from './simpleTable';
+import stateMachine from './stateMachine';
+import table from './table';
+import timer from './timer';
 
 const definitions = [
   api,
+  layer,
+  objectStore,
+  queue,
+  secrets,
+  stream,
+  simpleTable,
+  stateMachine,
+  table,
+  timer,
   bastion,
   cdn,
   cdnFunction,
@@ -30,4 +49,5 @@ const definitions = [
   httpApi,
   httpProxy,
   implicitApi,
+  lambda,
 ];

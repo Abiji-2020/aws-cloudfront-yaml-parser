@@ -50,7 +50,8 @@ export default {
         paletteResource: 'AWS::Serverless::Api',
         paletteInfo:
           'Use this resource type to declare a collection of implicit Amazon API Gateway resources and methods that can be invoked through HTTPS endpoints.',
-        paletteDocsLink: 'https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-api.html',
+        paletteDocsLink:
+          'https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-api.html',
         icon: 'rest-api.svg',
         info: 'Executes a function for each HTTP request',
         initialWidth: 140,
