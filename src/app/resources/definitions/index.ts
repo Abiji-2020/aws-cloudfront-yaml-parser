@@ -32,6 +32,8 @@ import websocket from './websocket';
 import graphqlToTable from './graphqlIntegrations/table';
 import graphqlToFunction from './graphqlIntegrations/function';
 import graphqlToHttpProxy from './graphqlIntegrations/httpProxy';
+import { intrinsicFunctionType } from '../manageCFResources';
+import cloneDeep from 'clone-deep';
 
 const definitions = [
   graphqlToFunction,
@@ -106,5 +108,21 @@ const formatResolver = (definition: any, format: string) => {
   }
   if (format === 'serverless') {
     const type = intrinsicFunctionType(definition);
+    if (type === 'Fn::Sub') {
+      if (Array.isArray(definition['Fn::Sub'])) {
+        definition['Fn::Sub'][0] = definition['Fn::Sub'][0].replace(
+          SERVERLESS_FN_SUB_RE,
+          '#{$1}',
+        );
+      } else {
+        definition['Fn::Sub'] = definition['Fn::Sub'].replace(
+          SERVERLESS_FN_SUB_RE,
+          '#{$1}',
+        );
+      }
+    }
   }
 };
+
+export const SAM = formatResolver(cloneDeep(definitions), 'SAM');
+export const serverless = formatResolver(cloneDeep(definitions), 'serverless');
