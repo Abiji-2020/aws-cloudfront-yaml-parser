@@ -29,8 +29,14 @@ import userPoolClient from './userPoolClient';
 import virtualNetwork from './virtualNetwork';
 import website from './website';
 import websocket from './websocket';
+import graphqlToTable from './graphqlIntegrations/table';
+import graphqlToFunction from './graphqlIntegrations/function';
+import graphqlToHttpProxy from './graphqlIntegrations/httpProxy';
 
 const definitions = [
+  graphqlToFunction,
+  graphqlToTable,
+  graphqlToHttpProxy,
   api,
   topic,
   userPool,
@@ -63,3 +69,42 @@ const definitions = [
   implicitApi,
   lambda,
 ];
+
+const SERVERLESS_RESOURCES_RE =
+  /^\$\.(Metadata[.[]|Resources[.[]|Conditions[.[])/;
+const SERVERLESS_FN_SUB_RE = /\$\{([^}]*)\}/g;
+
+const formatResolver = (definition: any, format: string) => {
+  if (definition && typeof definition === 'object') {
+    if (Object.keys(definition).length === 1 && 'Format' in definition) {
+      return formatResolver(
+        (definition['Format'] as any)[format] as Object,
+        format,
+      );
+    }
+
+    for (const key in definition) {
+      const subDefinition = definition[key];
+
+      if (
+        subDefinition &&
+        typeof subDefinition === 'object' &&
+        'OnlyFormats' in subDefinition
+      ) {
+        if (subDefinition['OnlyFormats'].includes(format)) {
+          definition[key] = formatResolver(subDefinition, format);
+          delete definition[key]['OnlyFormats'];
+        } else {
+          delete definition[key];
+        }
+      } else {
+        definition[key] = formatResolver(subDefinition, format);
+      }
+    }
+  } else if (format === 'serverless' && typeof definition === 'string') {
+    definition = definition.replace(SERVERLESS_RESOURCES_RE, '$.Resources.$1');
+  }
+  if (format === 'serverless') {
+    const type = intrinsicFunctionType(definition);
+  }
+};
