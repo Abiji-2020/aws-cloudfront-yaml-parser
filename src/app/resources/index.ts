@@ -1,10 +1,15 @@
+import cloneDeep from 'clone-deep';
 import parse from './parse';
 
 export default class State {
   template: { [key: string]: any } = {};
   resources: { [key: string]: any } = {};
   format: 'SAM' | 'Serverless' = 'SAM';
-  constructor(template: { [key: string]: any }, format: 'SAM' | 'Serverless') {
+  constructor(
+    template: { [key: string]: any },
+    format: 'SAM' | 'Serverless',
+    isDeployView = false,
+  ) {
     if (!template || typeof template !== 'object') {
       template = {};
     }
@@ -22,16 +27,20 @@ export default class State {
         delete template[section];
       }
     }
-    this.parseAndSetInstanceState(template, format);
+    this.parseAndSetInstanceState(template, format, isDeployView);
   }
+
   private reparseTemplate() {
     this.parseAndSetInstanceState(this.template, this.format);
   }
+
   private parseAndSetInstanceState(
     template: { [key: string]: any },
     format: 'SAM' | 'Serverless',
+    isDeployView = false,
   ) {
-    const parsed = parse(template, format);
-    this.template = template;
+    const parsed = parse(template, format, isDeployView);
+    this.template = parsed.template;
+    this.format = format;
   }
 }
