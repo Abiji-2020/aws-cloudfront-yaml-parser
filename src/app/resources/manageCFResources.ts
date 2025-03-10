@@ -1,7 +1,9 @@
-
 import * as query from './query';
 import transformations from './transformations';
 
+export const ERROR_CODES = {
+  UNDEFINED_CONTEXT_KEY: 'undefinedContextKey',
+};
 
 export const intrinsicFunctionType = (value: any) => {
   if (!value || typeof value !== 'object' || Object.keys(value).length !== 1) {
@@ -13,7 +15,6 @@ export const intrinsicFunctionType = (value: any) => {
   }
   return null;
 };
-
 
 export const injectContext = (template: any, context: any) => {
   if (typeof template === 'string') {
@@ -62,5 +63,73 @@ const transform = (spec: string, context: any) => {
   }
 };
 
-export const DEFAULT_PARAMETERS = {};
+export const DEFAULT_PARAMETERS = {
+  StackTagName: {
+    Type: 'String',
+    Description: 'Stack Name (injected by Stackery at deployment time)',
+  },
+  EnvironmentTagName: {
+    Type: 'String',
+    Description: 'Environment Name (injected by Stackery at deployment time)',
+  },
+  EnvironmentAPIGatewayStageName: {
+    Type: 'String',
+    Description:
+      'Environment name used for API Gateway Stage names (injected by Stackery at deployment time)',
+  },
+  DeploymentNamespace: {
+    Type: 'String',
+    Description:
+      'Deployment Namespace (injected by Stackery at deployment time)',
+  },
+  DeploymentTimestamp: {
+    Type: 'Number',
+    Description:
+      'Deployment preparation timestamp in milliseconds Since Epoch (injected by Stackery at deployment time)',
+  },
+  DefaultVPCId: {
+    Type: 'AWS::EC2::VPC::Id',
+    Description:
+      'AWS account-specific default VPC ID (injected by Stackery at deployment time)',
+  },
+  DefaultVPCSubnets: {
+    Type: 'List<AWS::EC2::Subnet::Id>',
+    Description:
+      'AWS account-specific default VPC subnets (injected by Stackery at deployment time)',
+  },
+  AmazonLinux2ImageId: {
+    Type: 'AWS::EC2::Image::Id',
+    Description:
+      'Latest Amazon Linux 2 AMI ID (injected by Stackery at deployment time)',
+  },
+  SourceLocation: {
+    Type: 'String',
+    Description:
+      'Location of source code for deployment (injected by Stackery at deployment time)',
+  },
+  SourceVersion: {
+    Type: 'String',
+    Description:
+      'Source version for deployment (injected by Stackery at deployment time)',
+  },
+};
+(DEFAULT_PARAMETERS as any)['StackeryStackTagName'] =
+  DEFAULT_PARAMETERS.StackTagName;
+(DEFAULT_PARAMETERS as any).StackeryEnvironmentTagName =
+  DEFAULT_PARAMETERS.EnvironmentTagName;
+(DEFAULT_PARAMETERS as any).StackeryEnvironmentAPIGatewayStageName =
+  DEFAULT_PARAMETERS.EnvironmentAPIGatewayStageName;
+(DEFAULT_PARAMETERS as any).StackeryDeploymentNamespace =
+  DEFAULT_PARAMETERS.DeploymentNamespace;
+(DEFAULT_PARAMETERS as any).StackeryDeploymentTimestamp =
+  DEFAULT_PARAMETERS.DeploymentTimestamp;
 
+export const findOwnerResourceId = (resourceId: any, resources: any): any => {
+  for (const otherResourceId in resources) {
+    const otherResource = resources[otherResourceId];
+
+    if (otherResource.TemplatePartial.Resources.includes(resourceId)) {
+      return otherResourceId;
+    }
+  }
+};

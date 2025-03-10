@@ -4,10 +4,10 @@ import parse from './parse';
 export default class State {
   template: { [key: string]: any } = {};
   resources: { [key: string]: any } = {};
-  format: 'SAM' | 'Serverless' = 'SAM';
+  format: 'SAM' | 'serverless' = 'SAM';
   constructor(
     template: { [key: string]: any },
-    format: 'SAM' | 'Serverless',
+    format: 'SAM' | 'serverless',
     isDeployView = false,
   ) {
     if (!template || typeof template !== 'object') {
@@ -36,7 +36,7 @@ export default class State {
 
   private parseAndSetInstanceState(
     template: { [key: string]: any },
-    format: 'SAM' | 'Serverless',
+    format: 'SAM' | 'serverless',
     isDeployView = false,
   ) {
     const parsed = parse(template, format, isDeployView);

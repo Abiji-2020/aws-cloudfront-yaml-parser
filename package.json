@@ -19,9 +19,9 @@
     "@angular/platform-browser-dynamic": "^19.1.0",
     "@angular/router": "^19.1.0",
     "clone-deep": "^4.0.1",
-
+    "deep-equal": "^2.2.3",
+    "graphql": "^16.10.0",
     "jsonpath": "^1.1.1",
-
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",
     "yaml-cfn": "^0.3.2",
@@ -32,6 +32,8 @@
     "@angular/cli": "^19.1.7",
     "@angular/compiler-cli": "^19.1.0",
     "@types/clone-deep": "^4.0.4",
+    "@types/deep-equal": "^1.0.4",
+    "@types/graphql": "^14.5.0",
     "@types/jasmine": "~5.1.0",
     "@types/jsonpath": "^0.2.4",
     "jasmine-core": "~5.5.0",

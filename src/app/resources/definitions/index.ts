@@ -123,11 +123,9 @@ const formatResolver = (definition: any, format: string) => {
     }
 
     return definition;
-
   }
 };
 
 export const SAM = formatResolver(cloneDeep(definitions), 'SAM');
 
-export const Serverless = formatResolver(cloneDeep(definitions), 'serverless');
-
+export const serverless = formatResolver(cloneDeep(definitions), 'serverless');
