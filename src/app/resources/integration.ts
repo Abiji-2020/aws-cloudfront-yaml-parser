@@ -40,12 +40,12 @@ export default class Integration extends AbstractResource {
       facetId,
       context,
     }: {
-      path: any;
-      object: any;
-      source: any;
-      target: any;
-      facetId: any;
-      context: any;
+      path?: any;
+      object?: any;
+      source?: any;
+      target?: any;
+      facetId?: any;
+      context?: any;
     },
   ) {
     super();

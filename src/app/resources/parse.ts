@@ -4,11 +4,15 @@ import Resource from './resource';
 import deepEqual from 'deep-equal';
 import resolveSubBindings from './resolveSubBindings';
 import * as query from './query';
-
+import Integration, {
+  ERROR_CODES as INTEGRATION_ERROR_CODES,
+} from './integration';
+import { serverlessCFId } from './resource';
+import Id, { isPhysicalNameInIdObject } from './id';
 const WEAK_OWNERS = ['AWS::EC2::VPC'];
 
 export default (
-  template: { [key: string]: any },
+  template: any,
   format: 'SAM' | 'serverless',
   isDeployView: boolean,
 ) => {
@@ -177,7 +181,7 @@ export default (
             integrationId: integration.Id,
             isIntegration: true,
           };
-        } catch (err) {
+        } catch (err: any) {
           if (err.code !== INTEGRATION_ERROR_CODES.integrationTypeInvalid) {
             throw err;
           }
@@ -194,15 +198,19 @@ export default (
   for (const logicalId in cfTemplate.Resources) {
     const resource = cfTemplate.Resources[logicalId];
 
-    if (!(logicalId in owners) && relationships[logicalId].size === 0) {
-      const stackeryResource = new Resource(
+    if (
+      !(logicalId in owners) &&
+      (relationships as any)[logicalId].size === 0
+    ) {
+      const cfnResource = new Resource(
         format,
         null,
         template,
         logicalId,
         resource,
+        undefined,
       );
-      resources[stackeryResource.Id] = stackeryResource;
+      resources[cfnResource.Id] = cfnResource;
     }
   }
 
@@ -517,4 +525,580 @@ export default (
     parameters: parameters,
     customResourceReferences,
   };
+};
+
+const calculateRelationships = (
+  template: any,
+  format: any,
+  locatedResources: any,
+) => {
+  const relationships = {};
+  const cfTemplate =
+    format === 'serverless' ? template.resources || {} : template;
+
+  let resourceIds =
+    (cfTemplate.Resources && Object.keys(cfTemplate.Resources)) || [];
+  if (format === 'serverless') {
+    for (const fn in template.functions || {}) {
+      resourceIds.push(serverlessCFId('function', fn));
+    }
+  }
+
+  for (const logicalId in cfTemplate.Resources) {
+    const _resourceReferences = resourceReferences(
+      cfTemplate.Resources[logicalId],
+      resourceIds,
+      locatedResources,
+    );
+
+    (relationships as any)[logicalId] =
+      (relationships as any)[logicalId] || new Set();
+
+    for (const relationship of _resourceReferences) {
+      (relationships as any)[logicalId].add(relationship);
+
+      (relationships as any)[relationship as any] =
+        (relationships as any)[relationship as any] || new Set();
+    }
+  }
+
+  return relationships;
+};
+
+const resourceReferences = (
+  object: any,
+  resourceIds: any,
+  locatedResources: any,
+) => {
+  const references = new Set();
+
+  /* Look for references based on physical resource names. This is important for
+   * things like S3 Bucket integrations that require permissions to be set
+   * before the integration is created. That means the permission must not use a
+   * hard dependency on the S3 Bucket, it must hard-code the bucket's physical
+   * name. */
+  for (const resource of Object.values(locatedResources)) {
+    if (
+      'PhysicalName' in (resource as any) &&
+      isPhysicalNameInIdObject(object, (resource as any).PhysicalName)
+    ) {
+      references.add((resource as any).Id);
+    }
+  }
+
+  if (typeof object !== 'object' || object === null) {
+    return references;
+  }
+
+  if ('Ref' in object && resourceIds.includes(object.Ref)) {
+    references.add(object.Ref);
+  } else if (
+    'Fn::GetAtt' in object &&
+    resourceIds.includes(object['Fn::GetAtt'][0])
+  ) {
+    references.add(object['Fn::GetAtt'][0]);
+  } else if ('Fn::Sub' in object) {
+    const pattern = Array.isArray(object['Fn::Sub'])
+      ? object['Fn::Sub'][0]
+      : object['Fn::Sub'];
+    const varsRE = new RegExp('[$#]\\{([^.}]+)(\\.[^}]+)?\\}', 'g');
+
+    for (
+      let match = varsRE.exec(pattern);
+      match;
+      match = varsRE.exec(pattern)
+    ) {
+      const varName = match[1];
+
+      if (resourceIds.includes(varName)) {
+        references.add(varName);
+      }
+    }
+
+    if (Array.isArray(object['Fn::Sub'])) {
+      for (const reference of resourceReferences(
+        object['Fn::Sub'][1],
+        resourceIds,
+        locatedResources,
+      )) {
+        references.add(reference);
+      }
+    }
+  } else {
+    for (const key in object) {
+      /* Filter out DependsOn CF resource properties. These aren't strong enough
+       * relationships to group resources together. */
+      if (key === 'DependsOn') {
+        continue;
+      }
+
+      /* Filter out compute environment references to other resources. These
+       * should not cause resource grouping. */
+      if (key === 'Environment') {
+        continue;
+      }
+
+      for (const reference of resourceReferences(
+        object[key],
+        resourceIds,
+        locatedResources,
+      )) {
+        references.add(reference);
+      }
+    }
+  }
+  return references;
+};
+
+const parseVirtualNetworkPlacements = (
+  resources: any,
+  template: any,
+  format: 'SAM' | 'serverless',
+) => {
+  const virtualNetworkPlacements = {};
+
+  const formatDefinitions = definitions[format];
+
+  for (const resourceType in formatDefinitions.VirtualNetworkPlacements) {
+    const definition = formatDefinitions.VirtualNetworkPlacements[resourceType];
+    const nodes = jp.nodes(template, definition.Locator);
+
+    for (const node of nodes) {
+      let resourceId;
+
+      if (definition.ResourceIndex) {
+        let index = definition.ResourceIndex;
+
+        /* Serverless framework non-functions resources are nested one level
+         * under the top-level 'resources' key. */
+        if (format === 'serverless' && resourceType !== 'function') {
+          index++;
+        }
+
+        resourceId = node.path[index];
+      } else if (definition.ResourcePath) {
+        resourceId = query.value(
+          definition.ResourcePath,
+          template,
+          node.value,
+          {},
+        );
+      } else {
+        throw new Error(
+          `Bad virtual network placement definition for ${definition.ResourceType}: Locator.ResourceIndex or Locator.ResourcePath must be defined`,
+        );
+      }
+
+      if (format === 'serverless' && resourceType === 'function') {
+        resourceId = serverlessCFId('function', resourceId);
+      }
+
+      try {
+        (virtualNetworkPlacements as any)[resourceId] =
+          new VirtualNetworkPlacement(
+            format,
+            definition,
+            template,
+            resources,
+            node.value,
+          );
+      } catch (err) {
+        // For default VPC and unknown VPCs simply act like the resource isn't placed inside a VPC
+        if (
+          err.code !== VPC_ERROR_CODES.DEFAULT_VPC_PLACEMENT &&
+          err.code !== VPC_ERROR_CODES.UNKNOWN_VPC_PLACEMENT
+        ) {
+          throw err;
+        }
+      }
+    }
+  }
+
+  return virtualNetworkPlacements;
+};
+
+export const log = (msg: string) => {
+  if (console.debug) {
+    console.debug(msg);
+  } else if (process.env['DEBUG']) {
+    console.log(msg);
+  }
+};
+
+const mergeResources = (
+  format: 'SAM' | 'serverless',
+  template: any,
+  resources: any,
+  integrations: any,
+  logicalId: any,
+  owners: any,
+  references: any,
+) => {
+  const cfTemplate = format === 'SAM' ? template : template.resources || {};
+
+  // resourceReferences is the list of resources that reference this resource(logicalId)
+  const resourceReferences = [...references[logicalId]];
+  log(`\n\nmergeResources: ${logicalId}: Start`);
+  log(
+    `mergeResources: ${logicalId}: references ${JSON.stringify(resourceReferences)}`,
+  );
+
+  const resourceReferencesOwners = resourceReferences
+    .filter((resourceId) => resourceId in owners)
+    .map((resourceId) => owners[resourceId].resourceId);
+  log(
+    `mergeResources: ${logicalId}: owner references ${JSON.stringify(resourceReferencesOwners)}`,
+  );
+
+  const unownedReferencedResourceIds = resourceReferences.filter(
+    (resourceId) => !(resourceId in owners),
+  );
+
+  let integrationIds = resourceReferences.filter((resourceId) => {
+    const owner = owners[resourceId];
+    if (owner && owner.isIntegration) {
+      log(
+        `mergeResources: ${logicalId}: references ${resourceId} which is owned by an integration: ${owner.isIntegration}: ${JSON.stringify(owner)}`,
+      );
+    }
+    return (
+      owner &&
+      owner.isIntegration &&
+      isAllowedGrouping(
+        logicalId,
+        resourceId,
+        owners,
+        integrations,
+        resources,
+        template,
+        format,
+      )
+    );
+  });
+
+  Object.keys(integrations).forEach((integrationId) => {
+    const integration = integrations[integrationId];
+    log(
+      `mergeResources: Checking integration ${integrationId} (Source: ${integration.Source.ResourceId}, Target: ${integration.Target.ResourceId})`,
+    );
+    if (
+      resourceReferencesOwners.includes(integration.Source.ResourceId) &&
+      resourceReferencesOwners.includes(integration.Target.ResourceId)
+    ) {
+      if (
+        isAllowedGrouping(
+          logicalId,
+          integrationId,
+          owners,
+          integrations,
+          resources,
+          template,
+          format,
+        )
+      ) {
+        integrationIds.push(integrationId);
+      }
+    }
+  });
+
+  let nonCustomReferencedResourceIds = resourceReferences.filter((targetId) => {
+    const owner = owners[targetId];
+    if (
+      owner &&
+      !owner.isIntegration &&
+      resources[owner.resourceId].Type !== 'custom'
+    ) {
+      log(
+        `mergeResources: ${logicalId}: nonCustomReferencedResource: ${JSON.stringify(owner)}`,
+      );
+    }
+    return (
+      owner &&
+      !owner.isIntegration &&
+      resources[owner.resourceId].Type !== 'custom' &&
+      isAllowedGrouping(
+        logicalId,
+        targetId,
+        owners,
+        integrations,
+        resources,
+        template,
+        format,
+      )
+    );
+  });
+
+  const customReferencedResourceIds = resourceReferences.filter((targetId) => {
+    const owner = owners[targetId];
+    if (
+      owner &&
+      !owner.isIntegration &&
+      resources[owner.resourceId].Type === 'custom'
+    ) {
+      log(
+        `mergeResources: ${logicalId}: customReferencedResource: ${JSON.stringify(owner)}`,
+      );
+    }
+    return (
+      owner &&
+      !owner.isIntegration &&
+      resources[owner.resourceId].Type === 'custom' &&
+      isAllowedGrouping(
+        logicalId,
+        targetId,
+        owners,
+        integrations,
+        resources,
+        template,
+        format,
+      )
+    );
+  });
+
+  log(
+    `mergeResources: ${logicalId}: integrationIds: ${JSON.stringify(integrationIds)}`,
+  );
+  log(
+    `mergeResources: ${logicalId}: nonCustomReferencedResourceIds: ${JSON.stringify(nonCustomReferencedResourceIds)}`,
+  );
+  log(
+    `mergeResources: ${logicalId}: customReferencedResourceIds: ${JSON.stringify(customReferencedResourceIds)}`,
+  );
+
+  /* Convert to a custom resource if:
+   *
+   * * No references refer to an already-parsed Cfn resource OR
+   * * The only references are to not-parsed-yet CF resources and weak owner
+   *   resources (e.g. VPCs)
+   *
+   * Many of these custom resources will end up being merged back into other
+   * non-custom Cfn resources later on.
+   */
+  if (
+    nonCustomReferencedResourceIds.length +
+      customReferencedResourceIds.length +
+      integrationIds.length ===
+      0 ||
+    (customReferencedResourceIds.length === 0 &&
+      unownedReferencedResourceIds.length > 0 &&
+      nonCustomReferencedResourceIds.every((resourceId) =>
+        WEAK_OWNERS.includes(cfTemplate.Resources[resourceId].Type),
+      ))
+  ) {
+    const CfnResource = new Resource(
+      format,
+      null,
+      template,
+      logicalId,
+      cfTemplate.Resources[logicalId],
+      undefined,
+    );
+    resources[CfnResource.Id] = CfnResource;
+
+    log(
+      `mergeResources: ${logicalId}: converting ${logicalId} to a custom resorce: ${CfnResource.Id}`,
+    );
+
+    owners[CfnResource.Id] = {
+      type: 'Resource',
+      resourceId: CfnResource.Id,
+      isIntegration: false,
+    };
+
+    return;
+  }
+
+  let mergeIds;
+  let source = resources;
+  if (integrationIds.length > 0) {
+    mergeIds = integrationIds;
+    source = integrations;
+  } else if (nonCustomReferencedResourceIds.length > 0) {
+    mergeIds = nonCustomReferencedResourceIds;
+  } else {
+    mergeIds = customReferencedResourceIds;
+  }
+  log(
+    `mergeResources: ${logicalId}: merging ${logicalId} into ${JSON.stringify(mergeIds)}`,
+  );
+
+  for (const mergeId of mergeIds) {
+    log(`mergeResources: ${logicalId}: merging ${logicalId} into ${mergeId}}`);
+    const owner = owners[mergeId];
+    let mergeResourceOwnerId = owner.isIntegration
+      ? owner.integrationId
+      : owner.resourceId;
+
+    if (owner.type === 'Facet') {
+      log(
+        `mergeResources: ${logicalId}: merging ${logicalId} into resource ${owner.resourceId} facet ${owner.facetId}`,
+      );
+      const facet = resources[owner.resourceId].Facets[owner.facetType].find(
+        (facet) => facet.Id === owner.facetId,
+      );
+      facet.addCFResource(
+        cfTemplate,
+        logicalId,
+        'Resource',
+        resources[logicalId],
+      );
+    } else {
+      source[mergeResourceOwnerId].addCFResource(
+        cfTemplate,
+        logicalId,
+        'Resource',
+        resources[logicalId],
+      );
+    }
+    owners[logicalId] = owner;
+
+    if (
+      isAllowedToChain(
+        logicalId,
+        mergeId,
+        owners,
+        integrations,
+        template,
+        format,
+      )
+    ) {
+      log(`mergeResources: ${logicalId}: Allowed to chain resources`);
+    } else {
+      log(`mergeResources: ${logicalId}: Not able to chain resources!`);
+      return;
+    }
+
+    for (const resourceId of customReferencedResourceIds.filter(
+      (resourceId) => resourceId !== mergeResourceOwnerId,
+    )) {
+      const mergingResourceOwnerId = owners[resourceId].resourceId;
+      for (const ownedResourceId of resources[mergingResourceOwnerId]
+        .TemplatePartial.Resources) {
+        if (
+          !resources[mergeResourceOwnerId] ||
+          ownedResourceId === mergeResourceOwnerId
+        ) {
+          continue;
+        }
+        log(
+          `mergeResources: ${logicalId}: adding ${ownedResourceId} into ${mergeResourceOwnerId}`,
+        );
+        resources[mergeResourceOwnerId].addCFResource(
+          cfTemplate,
+          ownedResourceId,
+          'Resource',
+          resources[ownedResourceId],
+        );
+        owners[ownedResourceId] = owner;
+      }
+      delete resources[resourceId];
+    }
+  }
+};
+
+const isAllowedGrouping = (
+  sourceId,
+  targetId,
+  owners,
+  integrations,
+  resources,
+  template,
+  format,
+) => {
+  log(`isAllowedGrouping: source ${sourceId} - target ${targetId}`);
+  const rules = getGroupingRules(format);
+
+  let { sourceType, targetType, integrationSourceType, integrationTargetType } =
+    getResourcesTypes(
+      sourceId,
+      targetId,
+      owners,
+      integrations,
+      template,
+      format,
+    );
+
+  log(
+    `isAllowedGrouping: sourceType: ${sourceType} \t targetType: ${targetType}`,
+  );
+  return rules.some((rule) => {
+    if (rule.targetIsIntegration) {
+      return testIntegrationRule(
+        sourceType,
+        integrationSourceType,
+        integrationTargetType,
+        rule,
+      );
+    }
+
+    if (testResourceRule(sourceType, targetType, rule)) {
+      if (rule.stopChaining) {
+        const targetOwner = owners[targetId];
+        const targetOwnerId = targetOwner.isIntegration
+          ? targetOwner.integrationId
+          : targetOwner.resourceId;
+        log(
+          `isAllowedGrouping: sourceType: ${sourceType} targetType: ${targetType} is allowed to group if rule not allready in use...`,
+        );
+        return !ruleInUse(
+          resources[targetOwnerId].TemplatePartial.Resources,
+          rule,
+          owners,
+          integrations,
+          template,
+          format,
+        );
+      }
+      return true;
+    }
+    return false;
+  });
+};
+
+export const isAllowedToChain = (
+  resourceId,
+  targetId,
+  owners,
+  integrations,
+  template,
+  format,
+  waiveError = false,
+) => {
+  const rules = getGroupingRules(format);
+  let { sourceType, targetType, integrationSourceType, integrationTargetType } =
+    getResourcesTypes(
+      resourceId,
+      targetId,
+      owners,
+      integrations,
+      template,
+      format,
+    );
+  let isAllowed = false;
+  let chainingAllowed = true;
+
+  rules.forEach((rule: any) => {
+    let valid = false;
+    if (rule.targetIsIntegration) {
+      valid = testIntegrationRule(
+        sourceType,
+        integrationSourceType,
+        integrationTargetType,
+        rule,
+      );
+    } else {
+      valid = testResourceRule(sourceType, targetType, rule);
+    }
+
+    if (valid) {
+      isAllowed = true;
+      chainingAllowed = chainingAllowed && !rule.stopChaining;
+    }
+  });
+
+  if (!isAllowed && !waiveError) {
+    throw new Error(`${resourceId} is not allowed to be owned by ${targetId}!`);
+  }
+
+  return chainingAllowed;
 };

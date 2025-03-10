@@ -66,62 +66,61 @@ const transform = (spec: string, context: any) => {
 export const DEFAULT_PARAMETERS = {
   StackTagName: {
     Type: 'String',
-    Description: 'Stack Name (injected by Stackery at deployment time)',
+    Description: 'Stack Name (injected by AWS at deployment time)',
   },
   EnvironmentTagName: {
     Type: 'String',
-    Description: 'Environment Name (injected by Stackery at deployment time)',
+    Description: 'Environment Name (injected by AWS at deployment time)',
   },
   EnvironmentAPIGatewayStageName: {
     Type: 'String',
     Description:
-      'Environment name used for API Gateway Stage names (injected by Stackery at deployment time)',
+      'Environment name used for API Gateway Stage names (injected by AWS at deployment time)',
   },
   DeploymentNamespace: {
     Type: 'String',
-    Description:
-      'Deployment Namespace (injected by Stackery at deployment time)',
+    Description: 'Deployment Namespace (injected by AWS at deployment time)',
   },
   DeploymentTimestamp: {
     Type: 'Number',
     Description:
-      'Deployment preparation timestamp in milliseconds Since Epoch (injected by Stackery at deployment time)',
+      'Deployment preparation timestamp in milliseconds Since Epoch (injected by AWS at deployment time)',
   },
   DefaultVPCId: {
     Type: 'AWS::EC2::VPC::Id',
     Description:
-      'AWS account-specific default VPC ID (injected by Stackery at deployment time)',
+      'AWS account-specific default VPC ID (injected by AWS at deployment time)',
   },
   DefaultVPCSubnets: {
     Type: 'List<AWS::EC2::Subnet::Id>',
     Description:
-      'AWS account-specific default VPC subnets (injected by Stackery at deployment time)',
+      'AWS account-specific default VPC subnets (injected by AWS at deployment time)',
   },
   AmazonLinux2ImageId: {
     Type: 'AWS::EC2::Image::Id',
     Description:
-      'Latest Amazon Linux 2 AMI ID (injected by Stackery at deployment time)',
+      'Latest Amazon Linux 2 AMI ID (injected by AWS at deployment time)',
   },
   SourceLocation: {
     Type: 'String',
     Description:
-      'Location of source code for deployment (injected by Stackery at deployment time)',
+      'Location of source code for deployment (injected by AWS at deployment time)',
   },
   SourceVersion: {
     Type: 'String',
     Description:
-      'Source version for deployment (injected by Stackery at deployment time)',
+      'Source version for deployment (injected by AWS at deployment time)',
   },
 };
-(DEFAULT_PARAMETERS as any)['StackeryStackTagName'] =
+(DEFAULT_PARAMETERS as any)['CfnStackTagName'] =
   DEFAULT_PARAMETERS.StackTagName;
-(DEFAULT_PARAMETERS as any).StackeryEnvironmentTagName =
+(DEFAULT_PARAMETERS as any).CfnEnvironmentTagName =
   DEFAULT_PARAMETERS.EnvironmentTagName;
-(DEFAULT_PARAMETERS as any).StackeryEnvironmentAPIGatewayStageName =
+(DEFAULT_PARAMETERS as any).CfnEnvironmentAPIGatewayStageName =
   DEFAULT_PARAMETERS.EnvironmentAPIGatewayStageName;
-(DEFAULT_PARAMETERS as any).StackeryDeploymentNamespace =
+(DEFAULT_PARAMETERS as any).CfnDeploymentNamespace =
   DEFAULT_PARAMETERS.DeploymentNamespace;
-(DEFAULT_PARAMETERS as any).StackeryDeploymentTimestamp =
+(DEFAULT_PARAMETERS as any).CfnDeploymentTimestamp =
   DEFAULT_PARAMETERS.DeploymentTimestamp;
 
 export const findOwnerResourceId = (resourceId: any, resources: any): any => {
