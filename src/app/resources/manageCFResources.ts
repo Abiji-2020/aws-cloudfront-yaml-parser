@@ -1,5 +1,7 @@
+
 import * as query from './query';
 import transformations from './transformations';
+
 
 export const intrinsicFunctionType = (value: any) => {
   if (!value || typeof value !== 'object' || Object.keys(value).length !== 1) {
@@ -11,6 +13,7 @@ export const intrinsicFunctionType = (value: any) => {
   }
   return null;
 };
+
 
 export const injectContext = (template: any, context: any) => {
   if (typeof template === 'string') {
@@ -60,3 +63,4 @@ const transform = (spec: string, context: any) => {
 };
 
 export const DEFAULT_PARAMETERS = {};
+
