@@ -103,10 +103,10 @@ const formatResolver = (definition: any, format: string) => {
         definition[key] = formatResolver(subDefinition, format);
       }
     }
-  } else if (format === 'serverless' && typeof definition === 'string') {
+  } else if (format === 'Serverless' && typeof definition === 'string') {
     definition = definition.replace(SERVERLESS_RESOURCES_RE, '$.Resources.$1');
   }
-  if (format === 'serverless') {
+  if (format === 'Serverless') {
     const type = intrinsicFunctionType(definition);
     if (type === 'Fn::Sub') {
       if (Array.isArray(definition['Fn::Sub'])) {
@@ -121,8 +121,9 @@ const formatResolver = (definition: any, format: string) => {
         );
       }
     }
+    return definition;
   }
 };
 
 export const SAM = formatResolver(cloneDeep(definitions), 'SAM');
-export const serverless = formatResolver(cloneDeep(definitions), 'serverless');
+export const Serverless = formatResolver(cloneDeep(definitions), 'serverless');
