@@ -20,7 +20,7 @@ import getCustomReferences from './getCustomReferences';
 import VirtualNetworkPlacement, {
   ERROR_CODES as VPC_ERROR_CODES,
 } from './virtualNetworkPlacement';
-
+import getGroupingRules from './getGrouptingRules';
 const WEAK_OWNERS = ['AWS::EC2::VPC'];
 
 export default (
@@ -717,8 +717,8 @@ const parseVirtualNetworkPlacements = (
       } catch (err) {
         // For default VPC and unknown VPCs simply act like the resource isn't placed inside a VPC
         if (
-          err.code !== VPC_ERROR_CODES.DEFAULT_VPC_PLACEMENT &&
-          err.code !== VPC_ERROR_CODES.UNKNOWN_VPC_PLACEMENT
+          (err as any).code !== VPC_ERROR_CODES.DEFAULT_VPC_PLACEMENT &&
+          (err as any).code !== VPC_ERROR_CODES.UNKNOWN_VPC_PLACEMENT
         ) {
           throw err;
         }
@@ -946,7 +946,7 @@ const mergeResources = (
         `mergeResources: ${logicalId}: merging ${logicalId} into resource ${owner.resourceId} facet ${owner.facetId}`,
       );
       const facet = resources[owner.resourceId].Facets[owner.facetType].find(
-        (facet) => facet.Id === owner.facetId,
+        (facet: any) => facet.Id === owner.facetId,
       );
       facet.addCFResource(
         cfTemplate,
@@ -1009,13 +1009,13 @@ const mergeResources = (
 };
 
 const isAllowedGrouping = (
-  sourceId,
-  targetId,
-  owners,
-  integrations,
-  resources,
-  template,
-  format,
+  sourceId: any,
+  targetId: any,
+  owners: any,
+  integrations: any,
+  resources: any,
+  template: any,
+  format: 'SAM' | 'serverless',
 ) => {
   log(`isAllowedGrouping: source ${sourceId} - target ${targetId}`);
   const rules = getGroupingRules(format);
@@ -1033,7 +1033,7 @@ const isAllowedGrouping = (
   log(
     `isAllowedGrouping: sourceType: ${sourceType} \t targetType: ${targetType}`,
   );
-  return rules.some((rule) => {
+  return rules.some((rule: any) => {
     if (rule.targetIsIntegration) {
       return testIntegrationRule(
         sourceType,
@@ -1068,12 +1068,12 @@ const isAllowedGrouping = (
 };
 
 export const isAllowedToChain = (
-  resourceId,
-  targetId,
-  owners,
-  integrations,
-  template,
-  format,
+  resourceId: any,
+  targetId: any,
+  owners: any,
+  integrations: any,
+  template: any,
+  format: any,
   waiveError = false,
 ) => {
   const rules = getGroupingRules(format);
@@ -1159,15 +1159,15 @@ const updateSettingParameters = (setting: any, template: any) => {
 };
 
 const parseReferences = (resources: any, template: any) => {
-  const stackeryReferences = {};
+  const cfnReferences = {};
 
   for (const fnId of Object.keys(resources).filter((id) =>
     isComputeResource(resources[id].Type),
   )) {
-    updateReferences(fnId, template, resources, stackeryReferences);
+    updateReferences(fnId, template, resources, cfnReferences);
   }
 
-  return stackeryReferences;
+  return cfnReferences;
 };
 
 const parsePermissions = (
@@ -1176,7 +1176,7 @@ const parsePermissions = (
   format: 'SAM' | 'serverless',
   references: any,
 ) => {
-  const stackeryPermissions = {};
+  const cfnPermissions = {};
 
   if (!template.Resources) {
     return {};
@@ -1195,7 +1195,7 @@ const parsePermissions = (
     );
 
     if (permissions) {
-      (stackeryPermissions as any)[fnId] = permissions;
+      (cfnPermissions as any)[fnId] = permissions;
     }
   }
 
@@ -1218,11 +1218,11 @@ const parsePermissions = (
     const iamRoleProps = template.Resources[iamRoleResourceId].Properties;
 
     if ('ManagedPolicies' in iamRoleProps) {
-      (stackeryPermissions as any)[dockerTaskId] =
-        (stackeryPermissions as any)[dockerTaskId] || [];
+      (cfnPermissions as any)[dockerTaskId] =
+        (cfnPermissions as any)[dockerTaskId] || [];
 
       for (const policy of iamRoleProps.ManagedPolicies) {
-        (stackeryPermissions as any)[dockerTaskId].push(
+        (cfnPermissions as any)[dockerTaskId].push(
           new Permission(policy, template, resources),
         );
       }
@@ -1231,10 +1231,10 @@ const parsePermissions = (
     if ('Policies' in iamRoleProps) {
       for (const policy of iamRoleProps.Policies) {
         for (const statement of policy.PolicyDocument.Statement) {
-          (stackeryPermissions as any)[dockerTaskId] =
-            (stackeryPermissions as any)[dockerTaskId] || [];
+          (cfnPermissions as any)[dockerTaskId] =
+            (cfnPermissions as any)[dockerTaskId] || [];
 
-          (stackeryPermissions as any)[dockerTaskId].push(
+          (cfnPermissions as any)[dockerTaskId].push(
             new Permission(statement, template, resources),
           );
         }
@@ -1255,9 +1255,7 @@ const parsePermissions = (
     const searchIAMCapable =
       definition.DefaultPermissions.IAMCapable[0].Actions[0];
 
-    for (const [resourceId, permissions] of Object.entries(
-      stackeryPermissions,
-    )) {
+    for (const [resourceId, permissions] of Object.entries(cfnPermissions)) {
       for (const permission of permissions as any) {
         // If this permission already has a located target, skip
         if ('Target' in permission && permission.Target.isLocalResource()) {
@@ -1309,7 +1307,7 @@ const parsePermissions = (
     }
   }
 
-  return stackeryPermissions;
+  return cfnPermissions;
 };
 
 const parseCustomReferences = (
@@ -1334,4 +1332,157 @@ const parseCustomReferences = (
     );
   }
   return references;
+};
+
+const getResourcesTypes = (
+  sourceId: any,
+  targetId: any,
+  owners: any,
+  integrations: any,
+  template: any,
+  format: 'SAM' | 'serverless',
+) => {
+  let sourceType;
+  let targetType;
+  let integrationSourceType;
+  let integrationTargetType;
+
+  if (format === 'SAM') {
+    sourceType = template.Resources[sourceId].Type;
+    targetType =
+      template.Resources[targetId] && template.Resources[targetId].Type;
+  } else if (format === 'serverless') {
+    const resources = template.resources.Resources;
+
+    sourceType = isServerlessFunction(sourceId, template)
+      ? 'AWS::Serverless::Function'
+      : resources[sourceId].Type;
+    targetType = isServerlessFunction(targetId, template)
+      ? 'AWS::Serverless::Function'
+      : resources[targetId] && resources[targetId].Type;
+  } else {
+    throw new Error(`Unknown format: ${format}`);
+  }
+
+  if (owners[targetId] && owners[targetId].isIntegration) {
+    let integrationId = owners[targetId].integrationId;
+    let integrationSourceId = integrations[integrationId].Source.ResourceId;
+    let integrationTargetId = integrations[integrationId].Target.ResourceId;
+
+    if (format === 'SAM') {
+      integrationSourceType = template.Resources[integrationSourceId].Type;
+      integrationTargetType = template.Resources[integrationTargetId].Type;
+    } else if (format === 'serverless') {
+      const resources = template.resources.Resources;
+
+      integrationSourceType = isServerlessFunction(
+        integrationSourceId,
+        template,
+      )
+        ? 'AWS::Serverless::Function'
+        : resources[integrationSourceId].Type;
+      integrationTargetType = isServerlessFunction(
+        integrationTargetId,
+        template,
+      )
+        ? 'AWS::Serverless::Function'
+        : resources[integrationTargetId].Type;
+    } else {
+      throw new Error(`Unknown format: ${format}`);
+    }
+  }
+
+  return {
+    sourceType,
+    targetType,
+    integrationSourceType,
+    integrationTargetType,
+  };
+};
+
+const isServerlessFunction = (resourceId: any, template: any) => {
+  if (!resourceId.endsWith('LambdaFunction')) {
+    return false;
+  }
+
+  let functionId = resourceId.replace('LambdaFunction', '');
+  let functionIdLowerCase = functionId[0].toLowerCase() + functionId.slice(1);
+  return (
+    template.functions[functionId] || template.functions[functionIdLowerCase]
+  );
+};
+
+const testIntegrationRule = (
+  sourceType: any,
+  integrationSourceType: any,
+  integrationTargetType: any,
+  rule: any,
+) => {
+  const soureRegex = RegExp(rule.sourceType);
+  const integrationSourceRegEx = RegExp(rule.integrationSourceType);
+  const integrationTargetRegEx = RegExp(rule.integrationTargetType);
+
+  const allowed =
+    soureRegex.test(sourceType) &&
+    integrationSourceRegEx.test(integrationSourceType) &&
+    integrationTargetRegEx.test(integrationTargetType);
+  if (allowed) {
+    log(
+      `testIntegrationRule: ${sourceType} is allowed to be grouped with an integration from ${integrationSourceType} to ${integrationTargetType}`,
+    );
+  }
+
+  return allowed;
+};
+
+const testResourceRule = (sourceType: any, targetType: any, rule: any) => {
+  const targetRegex = RegExp(rule.targetType);
+  const sourceRegex = RegExp(rule.sourceType);
+  let allowed = targetRegex.test(targetType) && sourceRegex.test(sourceType);
+  if (allowed) {
+    log(
+      `testResourceRule: ${sourceType} is allowed to be grouped with ${targetType} [rule: ${JSON.stringify(rule)}]`,
+    );
+  }
+
+  return allowed;
+};
+
+const ruleInUse = (
+  resources: any,
+  rule: any,
+  owners: any,
+  integrations: any,
+  template: any,
+  format: 'SAM' | 'serverless',
+) => {
+  if (rule.targetIsIntegration) {
+    log(`WARNING: Trying to test if integration rule is in use - not expected`);
+    return false;
+  }
+
+  for (const sourceId of resources) {
+    for (const targetId of resources) {
+      if (sourceId === targetId) {
+        continue;
+      }
+
+      const { sourceType, targetType } = getResourcesTypes(
+        sourceId,
+        targetId,
+        owners,
+        integrations,
+        template,
+        format,
+      );
+      const inUse = testResourceRule(sourceType, targetType, rule);
+      if (inUse) {
+        log(`ruleInUse: rule is in use`);
+        return true;
+      }
+    }
+  }
+
+  log(`ruleInUse: rule is not in use`);
+  return false;
 };
