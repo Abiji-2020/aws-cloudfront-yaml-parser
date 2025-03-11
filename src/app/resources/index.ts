@@ -5,6 +5,9 @@ import putVirtualNetworkPlacement from './putVirtualNetworkPalcements';
 import deletePermission from './deletePermission';
 import updatePermission from './updatePermission';
 import addPermission from './addPermission';
+import deleteIntegration from './deleteIntegration';
+import updateIntegrationSetting from './updateIntegrationSetting';
+import addIntegration from './addIntegration';
 
 export default class State {
   template: any;
@@ -123,6 +126,52 @@ export default class State {
     logCall('addPermission', [...arguments]);
 
     addPermission.apply(this, [...arguments] as [any, any]);
+  }
+
+  deleteIntegration(
+    sourceResourceId: any,
+    targetResourceId: any,
+    facetType: any,
+    facetId: any,
+  ) {
+    logCall('deleteIntegration', [...arguments]);
+
+    deleteIntegration.apply(this, [...arguments] as [any, any, any, any]);
+
+    if (this.reparseRequired) {
+      this.reparseTemplate();
+    }
+  }
+
+  updateIntegrationSetting(
+    sourceResourceId: any,
+    targetResourceId: any,
+    settingName: any,
+    value: any,
+  ) {
+    logCall('updateIntegrationSetting', [...arguments]);
+
+    updateIntegrationSetting.apply(this, [...arguments] as [
+      any,
+      any,
+      any,
+      any,
+    ]);
+  }
+
+  addIntegration(
+    sourceResourceId: string,
+    targetResourceId: string,
+    facetType: string,
+    facetId: any,
+  ) {
+    logCall('addIntegration', [...arguments]);
+
+    addIntegration.apply(this, [...arguments] as [any, any, any, any]);
+
+    if (this.reparseRequired) {
+      this.reparseTemplate();
+    }
   }
 
   putVirtualNetworkPlacement(resourceId: any, virtualNetworkId: any) {

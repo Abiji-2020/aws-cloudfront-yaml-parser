@@ -1,6 +1,7 @@
 import * as query from './query';
 import transformations from './transformations';
 import deepEqual from 'deep-equal';
+import Parameter from './parameter';
 
 export const ERROR_CODES = {
   UNDEFINED_CONTEXT_KEY: 'undefinedContextKey',
@@ -648,4 +649,135 @@ export const updateExistingResourceConditions = (
   } else {
     return template['Fn::If'][2];
   }
+};
+
+export const updateOwnership = (
+  state: any,
+  resource: any,
+  dispatchResults: any,
+) => {
+  const conditions = state.cfTemplate().Conditions || {};
+  const resources = state.cfTemplate().Resources || {};
+
+  for (const type of ['Conditions', 'Resources']) {
+    const section = state.cfTemplate()[type] || {};
+    const newIds = Object.keys(section).filter((id) => {
+      for (const resourceId in state.resources) {
+        const resource = state.resources[resourceId];
+
+        if (resource.TemplatePartial[type].includes(id)) {
+          return false;
+        }
+
+        if (resource.Facets) {
+          for (const facetType in resource.Facets) {
+            for (const facet of resource.Facets[facetType]) {
+              if (facet.TemplatePartial[type].includes(id)) {
+                return false;
+              }
+            }
+          }
+        }
+      }
+
+      for (const integration of state.integrations) {
+        if (integration.TemplatePartial[type].includes(id)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    Array.prototype.push.apply(resource.TemplatePartial[type], newIds);
+
+    /* Remove all deleted resources and conditions from existing resource
+     * template partials */
+    for (const resourceId in state.resources) {
+      state.resources[resourceId].TemplatePartial[type] = state.resources[
+        resourceId
+      ].TemplatePartial[type].filter(
+        (id: any) =>
+          id in conditions ||
+          id in resources ||
+          (state.format === 'serverless' &&
+            state.resources[resourceId].Type === 'function' &&
+            id === resourceId),
+      );
+    }
+
+    /* Remove all deleted resources and conditions from existing integration
+     * template partials */
+    for (const integration of state.integrations) {
+      integration.TemplatePartial[type] = integration.TemplatePartial[
+        type
+      ].filter((id: any) => id in conditions || id in resources);
+    }
+  }
+
+  // Mark ownership of shared resources we may not have re-generated
+  for (const dispatchResult of dispatchResults || []) {
+    if (dispatchResult.type === 'Upsert' && dispatchResult.path) {
+      if (dispatchResult.path.length === 3) {
+        if (
+          dispatchResult.path[1] === 'Resources' &&
+          !resource.TemplatePartial.Resources.includes(dispatchResult.path[2])
+        ) {
+          resource.TemplatePartial.Resources.push(dispatchResult.path[2]);
+        } else if (
+          dispatchResult.path[1] === 'Conditions' &&
+          !resource.TemplatePartial.Conditions.includes(dispatchResult.path[2])
+        ) {
+          resource.TemplatePartial.Conditions.push(dispatchResult.path[2]);
+        }
+      }
+    }
+  }
+};
+
+export const isResourceOwned = (state: any, logicalId: any) => {
+  for (const resourceId in state.resources) {
+    const resource = state.resources[resourceId];
+
+    if (resource.TemplatePartial.Resources.includes(logicalId)) {
+      return true;
+    }
+
+    if (resource.Facets) {
+      for (const facetType in resource.Facets) {
+        for (const facet of resource.Facets[facetType]) {
+          if (facet.TemplatePartial.Resources.includes(logicalId)) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+
+  for (const integration of state.integrations) {
+    if (integration.TemplatePartial.Resources.includes(logicalId)) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+export const updateParameterValues = (
+  value: any,
+  state: any,
+  isAdding: any,
+) => {
+  if (value instanceof Parameter) {
+    if (isAdding) {
+      value.insertIntoTemplate(state);
+      return value.reference();
+    }
+  } else if (value !== null && typeof value === 'object') {
+    for (const key in value) {
+      value[key] = updateParameterValues(value[key], state, isAdding);
+    }
+  }
+
+  return value;
 };
