@@ -540,3 +540,112 @@ export const updateExistingSubnetIdReferences = (
 const defaultVPCSubnetsSpec = {
   'Fn::Join': [',', { Ref: 'DefaultVPCSubnets' }],
 };
+
+export const updateExistingResourceConditions = (
+  template: any,
+  resource: any,
+  useExistingResource: any,
+) => {
+  const type = intrinsicFunctionType(template);
+
+  let logicalId;
+  if (useExistingResource) {
+    if (type === 'Ref') {
+      logicalId = template.Ref;
+    } else if (type === 'Fn::GetAtt') {
+      logicalId = template['Fn::GetAtt'][0];
+    } else if (
+      type === 'Fn::Sub' &&
+      template['Fn::Sub'].includes(`\${${resource.Id}`)
+    ) {
+      const existingResourceRegex = new RegExp(
+        `(?!\\$\\{${resource.Id}[^}.]*Existing)\\$\\{(${resource.Id}[^}.]*)`,
+        'g',
+      );
+
+      return {
+        'Fn::If': [
+          `${resource.Id}UseExistingResource`,
+          {
+            'Fn::Sub': template['Fn::Sub'].replace(
+              existingResourceRegex,
+              '${$1ExistingResource',
+            ),
+          },
+          {
+            'Fn::Sub': template['Fn::Sub'].replace(/ExistingResource\}/g, '}'),
+          },
+        ],
+      };
+    } else if (
+      type === 'Fn::If' &&
+      template[type][0] === `${resource.Id}UseExistingResource`
+    ) {
+      // This reference is already converted to a conditional reference
+      return template;
+    }
+  } else {
+    if (
+      type === 'Fn::If' &&
+      template[type][0] === `${resource.Id}UseExistingResource`
+    ) {
+      logicalId = resource.Id;
+    }
+  }
+
+  if (!logicalId) {
+    if (template && typeof template === 'object') {
+      for (const key in template) {
+        template[key] = updateExistingResourceConditions(
+          template[key],
+          resource,
+          useExistingResource,
+        );
+      }
+    }
+
+    return template;
+  }
+
+  if (!resource.TemplatePartial.Resources.includes(logicalId)) {
+    return template;
+  }
+
+  if (useExistingResource) {
+    if (type === 'Ref') {
+      const customRef =
+        logicalId === resource.Id
+          ? { Ref: `${resource.Id}ExistingResource` }
+          : {
+              'Fn::GetAtt': [
+                `${resource.Id}ExistingResource`,
+                `${logicalId.replace(resource.Id, '')}`,
+              ],
+            };
+
+      return {
+        'Fn::If': [`${resource.Id}UseExistingResource`, customRef, template],
+      };
+    } else {
+      const attributePrefix =
+        logicalId === resource.Id
+          ? ''
+          : `${logicalId.replace(resource.Id, '')}.`;
+
+      return {
+        'Fn::If': [
+          `${resource.Id}UseExistingResource`,
+          {
+            'Fn::GetAtt': [
+              `${resource.Id}ExistingResource`,
+              `${attributePrefix}${template['Fn::GetAtt'][1]}`,
+            ],
+          },
+          template,
+        ],
+      };
+    }
+  } else {
+    return template['Fn::If'][2];
+  }
+};

@@ -2,6 +2,10 @@ import cloneDeep from 'clone-deep';
 import parse from './parse';
 import deleteVirtualNetworkPlacement from './deleteVirtualNetworkPlacment';
 import putVirtualNetworkPlacement from './putVirtualNetworkPalcements';
+import deletePermission from './deletePermission';
+import updatePermission from './updatePermission';
+import addPermission from './addPermission';
+
 export default class State {
   template: any;
   resources: any;
@@ -103,6 +107,22 @@ export default class State {
   deleteVirtualNetworkPlacement(resourceId: any) {
     logCall('deleteVirtualNetworkPlacement', [...arguments]);
     deleteVirtualNetworkPlacement.apply(this, resourceId);
+  }
+
+  deletePermission(resourceId: any, permission: any) {
+    logCall('deletePermission', [...arguments]);
+    deletePermission.apply(this, [...arguments] as [any, any]);
+  }
+
+  updatePermission(resourceId: any, permissionIndex: any, options: any) {
+    logCall('updatePermission', [...arguments]);
+    updatePermission.apply(this, [...arguments] as [any, any, any]);
+  }
+
+  addPermission(resourceId: any, options: any) {
+    logCall('addPermission', [...arguments]);
+
+    addPermission.apply(this, [...arguments] as [any, any]);
   }
 
   putVirtualNetworkPlacement(resourceId: any, virtualNetworkId: any) {
