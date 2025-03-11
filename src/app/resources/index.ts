@@ -8,6 +8,10 @@ import addPermission from './addPermission';
 import deleteIntegration from './deleteIntegration';
 import updateIntegrationSetting from './updateIntegrationSetting';
 import addIntegration from './addIntegration';
+import deleteResource from './deleteResource';
+import updateFacetSetting from './updateFacetSetting';
+import getResourceSetting from './getResourceSetting';
+import updateResourceSetting from './updateResourceSetting';
 
 export default class State {
   template: any;
@@ -168,6 +172,53 @@ export default class State {
     logCall('addIntegration', [...arguments]);
 
     addIntegration.apply(this, [...arguments] as [any, any, any, any]);
+
+    if (this.reparseRequired) {
+      this.reparseTemplate();
+    }
+  }
+  deleteResource(resourceId: any) {
+    logCall('deleteResource', [...arguments]);
+
+    deleteResource.apply(this, [...arguments] as [any]);
+  }
+
+  updateFacetSetting(
+    resourceId: any,
+    facetType: any,
+    facetId: any,
+    settingName: any,
+    value: any,
+  ) {
+    logCall('updateFacetSetting', [...arguments]);
+
+    updateFacetSetting.apply(this, [...arguments] as [any, any, any, any, any]);
+
+    if (this.reparseRequired) {
+      this.reparseTemplate();
+    }
+  }
+
+  getResourceSetting(
+    resourceId: any,
+    facetType: any,
+    facetId: any,
+    settingName: any,
+    defaultOnly: any,
+  ) {
+    return getResourceSetting.apply(this, [...arguments] as [
+      any,
+      any,
+      any,
+      any,
+      any,
+    ]);
+  }
+
+  updateResourceSetting(resourceId: any, settingName: any, value: any) {
+    logCall('updateResourceSetting', [...arguments]);
+
+    updateResourceSetting.apply(this, [...arguments] as [any, any, any]);
 
     if (this.reparseRequired) {
       this.reparseTemplate();
