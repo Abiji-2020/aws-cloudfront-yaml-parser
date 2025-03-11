@@ -13,6 +13,13 @@ import { DEFAULT_PARAMETERS } from './manageCFResources';
 import Parameter from './parameter';
 import updateReferences from './updateReferences';
 import isComputeResource from '../utils/isComputeResource';
+import Permission, {
+  parsePermissionsFromFunctionOrStateMachine,
+} from './permission';
+import getCustomReferences from './getCustomReferences';
+import VirtualNetworkPlacement, {
+  ERROR_CODES as VPC_ERROR_CODES,
+} from './virtualNetworkPlacement';
 
 const WEAK_OWNERS = ['AWS::EC2::VPC'];
 
@@ -1166,7 +1173,7 @@ const parseReferences = (resources: any, template: any) => {
 const parsePermissions = (
   resources: any,
   template: any,
-  format: any,
+  format: 'SAM' | 'serverless',
   references: any,
 ) => {
   const stackeryPermissions = {};
@@ -1188,7 +1195,7 @@ const parsePermissions = (
     );
 
     if (permissions) {
-      stackeryPermissions[fnId] = permissions;
+      (stackeryPermissions as any)[fnId] = permissions;
     }
   }
 
@@ -1200,6 +1207,8 @@ const parsePermissions = (
     const iamRoleResourceId = query.value(
       "$.Properties.TaskRoleArn['Fn::GetAtt'][0]",
       dockerTask,
+      undefined,
+      {},
     );
 
     if (!iamRoleResourceId) {
@@ -1209,11 +1218,11 @@ const parsePermissions = (
     const iamRoleProps = template.Resources[iamRoleResourceId].Properties;
 
     if ('ManagedPolicies' in iamRoleProps) {
-      stackeryPermissions[dockerTaskId] =
-        stackeryPermissions[dockerTaskId] || [];
+      (stackeryPermissions as any)[dockerTaskId] =
+        (stackeryPermissions as any)[dockerTaskId] || [];
 
       for (const policy of iamRoleProps.ManagedPolicies) {
-        stackeryPermissions[dockerTaskId].push(
+        (stackeryPermissions as any)[dockerTaskId].push(
           new Permission(policy, template, resources),
         );
       }
@@ -1222,10 +1231,10 @@ const parsePermissions = (
     if ('Policies' in iamRoleProps) {
       for (const policy of iamRoleProps.Policies) {
         for (const statement of policy.PolicyDocument.Statement) {
-          stackeryPermissions[dockerTaskId] =
-            stackeryPermissions[dockerTaskId] || [];
+          (stackeryPermissions as any)[dockerTaskId] =
+            (stackeryPermissions as any)[dockerTaskId] || [];
 
-          stackeryPermissions[dockerTaskId].push(
+          (stackeryPermissions as any)[dockerTaskId].push(
             new Permission(statement, template, resources),
           );
         }
@@ -1249,7 +1258,7 @@ const parsePermissions = (
     for (const [resourceId, permissions] of Object.entries(
       stackeryPermissions,
     )) {
-      for (const permission of permissions) {
+      for (const permission of permissions as any) {
         // If this permission already has a located target, skip
         if ('Target' in permission && permission.Target.isLocalResource()) {
           continue;
@@ -1272,6 +1281,7 @@ const parsePermissions = (
               definition.SingletonId,
               null,
               null,
+              null,
             );
           }
           for (const reference of definition.DefaultReferences) {
@@ -1280,7 +1290,7 @@ const parsePermissions = (
             )) {
               if (
                 typeof referenceValue !== 'object' ||
-                !('Ref' in referenceValue)
+                !(referenceValue && 'Ref' in referenceValue)
               ) {
                 // It's not a proper reference without !Ref or similar.
                 continue;
@@ -1300,4 +1310,28 @@ const parsePermissions = (
   }
 
   return stackeryPermissions;
+};
+
+const parseCustomReferences = (
+  resources: any,
+  owners: any,
+  integrations: any,
+  template: any,
+  format: 'SAM' | 'serverless',
+) => {
+  let references = {};
+  for (const resourceId of Object.keys(resources).filter(
+    (id) => resources[id].Type === 'custom',
+  )) {
+    getCustomReferences(
+      resourceId,
+      resources,
+      owners,
+      integrations,
+      references,
+      template,
+      format,
+    );
+  }
+  return references;
 };
