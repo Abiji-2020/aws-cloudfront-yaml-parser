@@ -9,6 +9,11 @@ import Integration, {
 } from './integration';
 import { serverlessCFId } from './resource';
 import Id, { isPhysicalNameInIdObject } from './id';
+import { DEFAULT_PARAMETERS } from './manageCFResources';
+import Parameter from './parameter';
+import updateReferences from './updateReferences';
+import isComputeResource from '../utils/isComputeResource';
+
 const WEAK_OWNERS = ['AWS::EC2::VPC'];
 
 export default (
@@ -263,7 +268,7 @@ export default (
       const referencedResources = new Set();
       let resolvedAllReferences = true;
 
-      for (const relationship of relationships[logicalId]) {
+      for (const relationship of (relationships as any)[logicalId]) {
         if (relationship in owners) {
           referencedResources.add(owners[relationship]);
         } else {
@@ -286,7 +291,7 @@ export default (
         relationships,
       );
 
-      unownedResources.splice(i, 1);
+      unownedResources.splice(i as any, 1);
       break;
     }
   }
@@ -312,8 +317,8 @@ export default (
       );
 
       let mergeTargetId;
-      customResource.TemplatePartial.Resources.some((resourceId) => {
-        const resourceReferences = [...relationships[resourceId]];
+      customResource.TemplatePartial.Resources.some((resourceId: any) => {
+        const resourceReferences = [...(relationships as any)[resourceId]];
         log(
           `parse: customResource ${customResourceId}: resource ${resourceId}: references ${JSON.stringify(resourceReferences)}`,
         );
@@ -384,7 +389,7 @@ export default (
     log(
       `parse: customResource ${customResourceDeploymentMarkerTag} - Found custom resource for Deployment Marker Tag, removing`,
     );
-    delete resources[customResourceDeploymentMarkerTag];
+    delete resources[customResourceDeploymentMarkerTag as any];
   }
 
   // See if any non-custom resource can group with custom resources
@@ -400,11 +405,11 @@ export default (
       `\n\nparse: nonCustomResource ${nonCustomResourceId} (${nonCustomResource.Type}): Checking if this resource can own other custom resources`,
     );
 
-    nonCustomResource.TemplatePartial.Resources.forEach((resourceId) => {
-      if (!relationships[resourceId]) {
+    nonCustomResource.TemplatePartial.Resources.forEach((resourceId: any) => {
+      if (!(relationships as any)[resourceId]) {
         return;
       }
-      const resourceReferences = [...relationships[resourceId]];
+      const resourceReferences = [...(relationships as any)[resourceId]];
       log(
         `parse: nonCustomResource ${nonCustomResourceId}: resource ${resourceId}: references: ${resourceReferences}`,
       );
@@ -1101,4 +1106,198 @@ export const isAllowedToChain = (
   }
 
   return chainingAllowed;
+};
+
+const parseParameters = (template: any) => {
+  if (!('Parameters' in template)) {
+    return {};
+  }
+
+  const parameters = {};
+
+  for (const parameterId in template.Parameters) {
+    if (!(parameterId in DEFAULT_PARAMETERS)) {
+      (parameters as any)[parameterId] = Parameter.fromParameterId(
+        template,
+        parameterId,
+      );
+    }
+  }
+
+  return parameters;
+};
+
+const updateSettingParameters = (setting: any, template: any) => {
+  if (
+    !setting ||
+    !(typeof setting === 'object') ||
+    !('Parameters' in template)
+  ) {
+    return setting;
+  }
+
+  if (Object.keys(setting).length === 1 && 'Ref' in setting) {
+    if (setting.Ref in template.Parameters) {
+      return Parameter.fromParameterId(template, setting.Ref);
+    } else {
+      return setting;
+    }
+  }
+
+  for (const key in setting) {
+    setting[key] = updateSettingParameters(setting[key], template);
+  }
+
+  return setting;
+};
+
+const parseReferences = (resources: any, template: any) => {
+  const stackeryReferences = {};
+
+  for (const fnId of Object.keys(resources).filter((id) =>
+    isComputeResource(resources[id].Type),
+  )) {
+    updateReferences(fnId, template, resources, stackeryReferences);
+  }
+
+  return stackeryReferences;
+};
+
+const parsePermissions = (
+  resources: any,
+  template: any,
+  format: any,
+  references: any,
+) => {
+  const stackeryPermissions = {};
+
+  if (!template.Resources) {
+    return {};
+  }
+
+  for (const fnId of Object.keys(template.Resources).filter(
+    (id) =>
+      template.Resources[id].Type === 'AWS::Serverless::Function' ||
+      template.Resources[id].Type === 'AWS::Serverless::StateMachine',
+  )) {
+    const fn = template.Resources[fnId];
+    const permissions = parsePermissionsFromFunctionOrStateMachine(
+      fn,
+      template,
+      resources,
+    );
+
+    if (permissions) {
+      stackeryPermissions[fnId] = permissions;
+    }
+  }
+
+  for (const dockerTaskId of Object.keys(template.Resources).filter(
+    (id) => template.Resources[id].Type === 'AWS::ECS::TaskDefinition',
+  )) {
+    const dockerTask = template.Resources[dockerTaskId];
+
+    const iamRoleResourceId = query.value(
+      "$.Properties.TaskRoleArn['Fn::GetAtt'][0]",
+      dockerTask,
+    );
+
+    if (!iamRoleResourceId) {
+      continue;
+    }
+
+    const iamRoleProps = template.Resources[iamRoleResourceId].Properties;
+
+    if ('ManagedPolicies' in iamRoleProps) {
+      stackeryPermissions[dockerTaskId] =
+        stackeryPermissions[dockerTaskId] || [];
+
+      for (const policy of iamRoleProps.ManagedPolicies) {
+        stackeryPermissions[dockerTaskId].push(
+          new Permission(policy, template, resources),
+        );
+      }
+    }
+
+    if ('Policies' in iamRoleProps) {
+      for (const policy of iamRoleProps.Policies) {
+        for (const statement of policy.PolicyDocument.Statement) {
+          stackeryPermissions[dockerTaskId] =
+            stackeryPermissions[dockerTaskId] || [];
+
+          stackeryPermissions[dockerTaskId].push(
+            new Permission(statement, template, resources),
+          );
+        }
+      }
+    }
+  }
+
+  // Handle virtual reference resources, e.g. secrets, which we discover by permissions
+  // rather than references.  A reference is added to indicate the use of the resource.
+  const formatDefinitions = definitions[format];
+
+  for (const resourceType in formatDefinitions.ResourceTypes) {
+    const definition = formatDefinitions.ResourceTypes[resourceType];
+    if (!definition.IsVirtualReferenceResource) {
+      continue;
+    }
+    const searchSAMCapable = definition.DefaultPermissions.SAMCapable[0];
+    const searchIAMCapable =
+      definition.DefaultPermissions.IAMCapable[0].Actions[0];
+
+    for (const [resourceId, permissions] of Object.entries(
+      stackeryPermissions,
+    )) {
+      for (const permission of permissions) {
+        // If this permission already has a located target, skip
+        if ('Target' in permission && permission.Target.isLocalResource()) {
+          continue;
+        }
+
+        const hasSamPermission =
+          permission.PolicyName === searchSAMCapable.PolicyName;
+        const hasIamPermission =
+          permission.PermissionType === 'iamStatement' &&
+          permission.Effect === 'Allow' &&
+          permission.Actions.includes(searchIAMCapable);
+
+        if (hasSamPermission || hasIamPermission) {
+          // The function or docker task depends on the resource's permission; create the
+          // virtual reference resource if necessary and add a reference to it.
+          if (!(definition.SingletonId in resources)) {
+            resources[definition.SingletonId] = new Resource(
+              format,
+              resourceType,
+              definition.SingletonId,
+              null,
+              null,
+            );
+          }
+          for (const reference of definition.DefaultReferences) {
+            for (const [referenceKey, referenceValue] of Object.entries(
+              reference,
+            )) {
+              if (
+                typeof referenceValue !== 'object' ||
+                !('Ref' in referenceValue)
+              ) {
+                // It's not a proper reference without !Ref or similar.
+                continue;
+              }
+              references[resourceId] = references[resourceId] || {};
+              references[resourceId][referenceKey] = new Id(
+                { Ref: definition.SingletonId },
+                template,
+                resources,
+              );
+            }
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  return stackeryPermissions;
 };
