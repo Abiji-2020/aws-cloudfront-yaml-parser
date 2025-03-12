@@ -1,4 +1,4 @@
-import { dirname } from 'path';
+import { dirname } from 'path-browserify';
 import cloneDeep from 'clone-deep';
 import { intrinsicFunctionType, DEFAULT_PARAMETERS } from './manageCFResources';
 import Parameter from './parameter';

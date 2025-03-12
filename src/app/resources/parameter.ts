@@ -2,6 +2,8 @@ import cloneDeep from 'clone-deep';
 
 const ENV_CONFIG_FORMAT_RE = /^AWS::SSM::Parameter::Value<(\S+)>$/;
 
+declare const require: any;
+
 export default class Parameter {
   ParameterId: any;
   Format: any;
@@ -49,6 +51,7 @@ export default class Parameter {
     const key = parameterInOldConfig
       ? template.Metadata.EnvConfigParameters[parameterId]
       : template.Metadata.EnvConfigParameters[parameterId];
+      
 
     // Dynamic import to prevent circular dependency in import statements
     const EnvConfigParameter = require('./envConfigParameter').default;

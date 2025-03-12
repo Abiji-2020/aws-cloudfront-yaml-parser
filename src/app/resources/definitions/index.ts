@@ -35,7 +35,7 @@ import graphqlToHttpProxy from './graphqlIntegrations/httpProxy';
 import { intrinsicFunctionType } from '../manageCFResources';
 import cloneDeep from 'clone-deep';
 
-const definitions = [
+const definitions= {
   graphqlToFunction,
   graphqlToTable,
   graphqlToHttpProxy,
@@ -70,13 +70,13 @@ const definitions = [
   httpProxy,
   implicitApi,
   lambda,
-];
+}
 
 const SERVERLESS_RESOURCES_RE =
   /^\$\.(Metadata[.[]|Resources[.[]|Conditions[.[])/;
 const SERVERLESS_FN_SUB_RE = /\$\{([^}]*)\}/g;
 
-const formatResolver = (definition: any, format: string) => {
+const formatResolver = (definition: any, format: 'SAM' | 'serverless') => {
   if (definition && typeof definition === 'object') {
     if (Object.keys(definition).length === 1 && 'Format' in definition) {
       return formatResolver(
@@ -95,7 +95,10 @@ const formatResolver = (definition: any, format: string) => {
       ) {
         if (subDefinition['OnlyFormats'].includes(format)) {
           definition[key] = formatResolver(subDefinition, format);
-          delete definition[key]['OnlyFormats'];
+          if (definition[key]) {
+            delete definition[key]['OnlyFormats'];
+          }
+          
         } else {
           delete definition[key];
         }
@@ -103,10 +106,10 @@ const formatResolver = (definition: any, format: string) => {
         definition[key] = formatResolver(subDefinition, format);
       }
     }
-  } else if (format === 'Serverless' && typeof definition === 'string') {
+  } else if (format === 'serverless' && typeof definition === 'string') {
     definition = definition.replace(SERVERLESS_RESOURCES_RE, '$.Resources.$1');
   }
-  if (format === 'Serverless') {
+  if (format === 'serverless') {
     const type = intrinsicFunctionType(definition);
     if (type === 'Fn::Sub') {
       if (Array.isArray(definition['Fn::Sub'])) {
@@ -122,10 +125,12 @@ const formatResolver = (definition: any, format: string) => {
       }
     }
 
-    return definition;
+    return definition || {};
   }
 };
 
 export const SAM = formatResolver(cloneDeep(definitions), 'SAM');
+console.log("SAM:", SAM);
 
 export const serverless = formatResolver(cloneDeep(definitions), 'serverless');
+console.log("serverless:", serverless);

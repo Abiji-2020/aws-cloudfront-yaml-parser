@@ -732,7 +732,7 @@ const parseVirtualNetworkPlacements = (
 export const log = (msg: string) => {
   if (console.debug) {
     console.debug(msg);
-  } else if (process.env['DEBUG']) {
+  } else if (true) {
     console.log(msg);
   }
 };

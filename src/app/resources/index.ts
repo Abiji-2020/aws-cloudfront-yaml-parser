@@ -12,6 +12,11 @@ import deleteResource from './deleteResource';
 import updateFacetSetting from './updateFacetSetting';
 import getResourceSetting from './getResourceSetting';
 import updateResourceSetting from './updateResourceSetting';
+import validateResourceIntegrations from './validateResourceIntegrations';
+import validateResourceSettings from './validateResourceSettings';
+import deleteReference from './deleteReference';
+import addReference from './addReference';
+import addResource from './addResource';
 
 export default class State {
   template: any;
@@ -111,6 +116,11 @@ export default class State {
     return template;
   }
 
+  addResource(type: any , generatdId: any ){
+    logCall('addResource', [...arguments]);
+    return addResource.apply(this, [...arguments] as [any, any]);
+  }
+
   deleteVirtualNetworkPlacement(resourceId: any) {
     logCall('deleteVirtualNetworkPlacement', [...arguments]);
     deleteVirtualNetworkPlacement.apply(this, resourceId);
@@ -130,6 +140,24 @@ export default class State {
     logCall('addPermission', [...arguments]);
 
     addPermission.apply(this, [...arguments] as [any, any]);
+  }
+
+  validateResourceSettings (resourceId : any ) { 
+    validateResourceSettings.apply(this, [...arguments] as [any]);
+  }
+
+  deleteReference(resourceId: any, targetId: any) {
+    logCall('deleteReference', [...arguments]);
+
+    deleteReference.apply(this, [...arguments] as [any, any]);
+
+  }
+
+  addReference(resourceId: any, targetId: any) {
+    logCall('addReference', [...arguments]);
+
+    addReference.apply(this, [...arguments] as [any, any]);
+
   }
 
   deleteIntegration(
@@ -223,6 +251,10 @@ export default class State {
     if (this.reparseRequired) {
       this.reparseTemplate();
     }
+  }
+
+  validateResourceIntegrations(resourceId: any ){
+    validateResourceIntegrations.apply(this, [...arguments] as [any]);
   }
 
   putVirtualNetworkPlacement(resourceId: any, virtualNetworkId: any) {
