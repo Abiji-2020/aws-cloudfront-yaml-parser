@@ -1,6 +1,6 @@
 import cloneDeep from 'clone-deep';
 import Id from './id';
-import {SAM} from './definitions';
+import { SAM } from './definitions';
 
 export const types = {
   IAM_POLICY: 'iamPolicy',
@@ -90,15 +90,12 @@ export default class Permission {
     this.Target = targetId;
   }
 }
-console.log("definitions:", );
-console.log("definitions.SAM:", SAM);
-console.log("definitions.SAM.PermissionTypes:", SAM?.PermissionTypes);
 
-const samPolicyMappings = Object.keys(SAM.PermissionTypes).reduce(
+const samPolicyMappings = Object.keys(SAM?.PermissionTypes ?? {}).reduce(
   (mappings, resourceType) => {
-    const permissionDefinitions = SAM.PermissionTypes[resourceType];
+    const permissionDefinitions = SAM?.PermissionTypes?.[resourceType];
 
-    if (!('SAM' in permissionDefinitions)) {
+    if (!permissionDefinitions || !('SAM' in permissionDefinitions)) {
       return mappings;
     }
 
@@ -108,7 +105,7 @@ const samPolicyMappings = Object.keys(SAM.PermissionTypes).reduce(
 
     return mappings;
   },
-  {},
+  {} as Record<string, string>,
 );
 
 export const parsePermissionsFromFunctionOrStateMachine = (

@@ -13,16 +13,24 @@ export default class AbstractResource {
       this.TemplatePartial[resourceSection].push(logicalId);
     }
 
-    if (resource) {
+    if (resource && resource.TemplatePartial && this.TemplatePartial) {
       for (const section of ['Conditions', 'Resources']) {
         const partials = this.TemplatePartial[section];
+        const resourcePartials = resource.TemplatePartial[section];
 
-        for (const logicalId of resource.TemplatePartial[section]) {
+        // If either the target or resource section is missing, skip to the next iteration
+        if (!partials || !resourcePartials) continue;
+
+        for (const logicalId of resourcePartials) {
           if (!partials.includes(logicalId)) {
             partials.push(logicalId);
           }
         }
       }
+    } else {
+      console.log(
+        'Either resource.TemplatePartial or this.TemplatePartial is undefined.',
+      );
     }
   }
 

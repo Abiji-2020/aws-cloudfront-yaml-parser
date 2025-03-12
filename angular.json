@@ -22,7 +22,6 @@
       "prefix": "app",
       "architect": {
         "build": {
-          
           "builder": "@angular-devkit/build-angular:application",
           "options": {
             "outputPath": "dist/cfn-visual",
@@ -45,13 +44,12 @@
               "jsonpath",
               "deep-equal",
               "path-browserify"
-            ], 
+            ],
             "optimization": false,
             "outputHashing": "all",
             "sourceMap": true,
             "namedChunks": true,
             "extractLicenses": false
-            
           },
           "configurations": {
             "production": {

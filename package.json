@@ -20,6 +20,7 @@
     "@angular/router": "^19.1.0",
     "clone-deep": "^4.0.1",
     "deep-equal": "^2.2.3",
+    "deepmerge": "^4.3.1",
     "graphql": "^16.10.0",
     "jsonpath": "^1.1.1",
     "path-browserify": "^1.0.1",

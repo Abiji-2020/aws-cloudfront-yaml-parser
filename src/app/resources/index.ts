@@ -116,7 +116,7 @@ export default class State {
     return template;
   }
 
-  addResource(type: any , generatdId: any ){
+  addResource(type: any, generatdId: any) {
     logCall('addResource', [...arguments]);
     return addResource.apply(this, [...arguments] as [any, any]);
   }
@@ -142,7 +142,7 @@ export default class State {
     addPermission.apply(this, [...arguments] as [any, any]);
   }
 
-  validateResourceSettings (resourceId : any ) { 
+  validateResourceSettings(resourceId: any) {
     validateResourceSettings.apply(this, [...arguments] as [any]);
   }
 
@@ -150,14 +150,12 @@ export default class State {
     logCall('deleteReference', [...arguments]);
 
     deleteReference.apply(this, [...arguments] as [any, any]);
-
   }
 
   addReference(resourceId: any, targetId: any) {
     logCall('addReference', [...arguments]);
 
     addReference.apply(this, [...arguments] as [any, any]);
-
   }
 
   deleteIntegration(
@@ -253,7 +251,7 @@ export default class State {
     }
   }
 
-  validateResourceIntegrations(resourceId: any ){
+  validateResourceIntegrations(resourceId: any) {
     validateResourceIntegrations.apply(this, [...arguments] as [any]);
   }
 

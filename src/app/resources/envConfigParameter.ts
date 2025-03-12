@@ -5,8 +5,8 @@ const SSM_KEY_FILTER_RE = /[^a-zA-Z0-9_/-]/g;
 const SSM_KEY_HIEARACHY_RE = /\./g;
 
 export default class EnvConfigParameter extends Parameter {
-    Key: any;
-  constructor (format:'SAM' | 'serverless', key: any , parameterId: any ) {
+  Key: any;
+  constructor(format: 'SAM' | 'serverless', key: any, parameterId: any) {
     if (!parameterId) {
       const keyPart = key.replace(LOGICAL_ID_FILTER_RE, '');
       const formatPart = format.replace(LOGICAL_ID_FILTER_RE, '');
@@ -19,10 +19,13 @@ export default class EnvConfigParameter extends Parameter {
     this.Key = key;
   }
 
- override insertIntoTemplate (state: any ) {
+  override insertIntoTemplate(state: any) {
     super.insertIntoTemplate(state);
 
-    let ssmKey = this.Key.replace(SSM_KEY_HIEARACHY_RE, '/').replace(SSM_KEY_FILTER_RE, '');
+    let ssmKey = this.Key.replace(SSM_KEY_HIEARACHY_RE, '/').replace(
+      SSM_KEY_FILTER_RE,
+      '',
+    );
 
     if (this.Format.startsWith('List<')) {
       ssmKey += '/AsList';
@@ -37,13 +40,15 @@ export default class EnvConfigParameter extends Parameter {
 
     cfTemplate.Metadata = cfTemplate.Metadata || {};
 
-    // Convert StackeryEnvConfigParameters to EnvConfigParameters
-    if ('StackeryEnvConfigParameters' in cfTemplate.Metadata) {
-      cfTemplate.Metadata.EnvConfigParameters = cfTemplate.Metadata.StackeryEnvConfigParameters;
-      delete cfTemplate.Metadata.StackeryEnvConfigParameters;
+    // Convert cfnEnvConfigParameters to EnvConfigParameters
+    if ('cfnEnvConfigParameters' in cfTemplate.Metadata) {
+      cfTemplate.Metadata.EnvConfigParameters =
+        cfTemplate.Metadata.cfnEnvConfigParameters;
+      delete cfTemplate.Metadata.cfnEnvConfigParameters;
     }
 
-    cfTemplate.Metadata.EnvConfigParameters = cfTemplate.Metadata.EnvConfigParameters || {};
+    cfTemplate.Metadata.EnvConfigParameters =
+      cfTemplate.Metadata.EnvConfigParameters || {};
 
     const paramMetadata = cfTemplate.Metadata.EnvConfigParameters;
     paramMetadata[this.ParameterId] = this.Key;

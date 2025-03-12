@@ -1,12 +1,10 @@
 import { TestBed } from '@angular/core/testing';
-import { RouterModule } from '@angular/router';
 import { AppComponent } from './app.component';
 
 describe('AppComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [RouterModule.forRoot([])],
-      declarations: [AppComponent],
+      imports: [AppComponent],
     }).compileComponents();
   });
 
@@ -16,10 +14,10 @@ describe('AppComponent', () => {
     expect(app).toBeTruthy();
   });
 
-  it(`should have as title 'cfn-visual'`, () => {
+  it(`should have the 'cfnParser' title`, () => {
     const fixture = TestBed.createComponent(AppComponent);
     const app = fixture.componentInstance;
-    expect(app.title).toEqual('cfn-visual');
+    expect(app.title).toEqual('cfnParser');
   });
 
   it('should render title', () => {
@@ -27,7 +25,7 @@ describe('AppComponent', () => {
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('h1')?.textContent).toContain(
-      'Hello, cfn-visual',
+      'Hello, cfnParser',
     );
   });
 });

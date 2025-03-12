@@ -51,7 +51,6 @@ export default class Parameter {
     const key = parameterInOldConfig
       ? template.Metadata.EnvConfigParameters[parameterId]
       : template.Metadata.EnvConfigParameters[parameterId];
-      
 
     // Dynamic import to prevent circular dependency in import statements
     const EnvConfigParameter = require('./envConfigParameter').default;
